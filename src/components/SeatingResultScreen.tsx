@@ -14,6 +14,10 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const totalCols = config.mainColumns * config.seatsPerColumn;
   const rows = Math.ceil(config.studentsPerRoom / totalCols);
 
+  if (!rooms || rooms.length === 0) {
+    return <div className="text-center py-20 text-muted-foreground">No rooms to display.</div>;
+  }
+
   const handlePrint = () => {
     window.print();
   };
