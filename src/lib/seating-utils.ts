@@ -63,6 +63,22 @@ export function detectDepartment(rollNumber: string): string {
   return 'GEN';
 }
 
+function extractRollNumbersFromText(text: string): string[] {
+  const results: string[] = [];
+  const lines = text.split('\n');
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(
+      /^(\d{1,3})\s+([A-Z]{0,3}\d{5,9})\s+[A-Z]/
+    );
+    if (match) {
+      results.push(match[2]);
+    }
+  }
+  return results;
+}
+
 export async function extractRollNumbersFromPdf(
   file: File,
   onProgress: (page: number, total: number, fileName: string) => void
@@ -71,30 +87,26 @@ export async function extractRollNumbersFromPdf(
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const totalPages = pdf.numPages;
   
-  const allRollNumbers: string[] = [];
+  let allText = '';
   let declaredCount: number | null = null;
   
   for (let i = 1; i <= totalPages; i++) {
     onProgress(i, totalPages, file.name);
     const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const text = textContent.items.map((item: any) => item.str).join(' ');
+    const content = await page.getTextContent();
+    const pageText = content.items.map((item: any) => item.str).join(' ');
+    allText += pageText + '\n';
     
-    // Try to find declared count in header
+    // Try to find declared count in first 2 pages
     if (i <= 2 && declaredCount === null) {
-      const countMatch = text.match(/No\.?\s*of\s*Candidates\s*[:\-]?\s*(\d+)/i);
+      const countMatch = pageText.match(/No\.?\s*of\s*Candidates\s*[:\-]?\s*(\d+)/i);
       if (countMatch) {
         declaredCount = parseInt(countMatch[1], 10);
       }
     }
-    
-    // Extract roll numbers using structural position regex
-    const regex = /^\s*(\d{1,3})\s+([A-Z]{0,2}\d{5,9})\s+[A-Z]{2,}/gm;
-    let match;
-    while ((match = regex.exec(text)) !== null) {
-      allRollNumbers.push(match[2]);
-    }
   }
+  
+  const allRollNumbers = extractRollNumbersFromText(allText);
   
   return {
     fileName: file.name,
