@@ -5,9 +5,10 @@ import { RoomConfig } from '@/lib/seating-utils';
 interface RoomConfigScreenProps {
   totalStudents: number;
   onGenerate: (config: RoomConfig) => void;
+  onBack: () => void;
 }
 
-const RoomConfigScreen: React.FC<RoomConfigScreenProps> = ({ totalStudents, onGenerate }) => {
+const RoomConfigScreen: React.FC<RoomConfigScreenProps> = ({ totalStudents, onGenerate, onBack }) => {
   const [studentsPerRoom, setStudentsPerRoom] = useState(45);
   const [mainColumns, setMainColumns] = useState(3);
   const [seatsPerColumn, setSeatsPerColumn] = useState(3);
