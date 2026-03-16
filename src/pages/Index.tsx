@@ -15,8 +15,9 @@ import {
 } from '@/lib/seating-utils';
 
 const Index = () => {
-  const [step, setStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(1);
   const [pdfResults, setPdfResults] = useState<PdfExtractionResult[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [totalPdfs, setTotalPdfs] = useState(0);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [rooms, setRooms] = useState<RoomAllocation[]>([]);
@@ -24,15 +25,16 @@ const Index = () => {
 
   const handleUploadComplete = (results: PdfExtractionResult[], files: File[]) => {
     setPdfResults(results);
+    setUploadedFiles(files);
     setTotalPdfs(files.length);
     const deduped = deduplicateStudents(results);
     setStudents(deduped);
-    setStep(2);
+    setCurrentStep(2);
   };
 
   const handleVerifyConfirm = (confirmedStudents: StudentRecord[]) => {
     setStudents(confirmedStudents);
-    setStep(3);
+    setCurrentStep(3);
   };
 
   const handleGenerate = (config: RoomConfig) => {
@@ -40,32 +42,50 @@ const Index = () => {
     const interleaved = interleaveStudents([...students]);
     const allocated = allocateRooms(interleaved, config.studentsPerRoom);
     setRooms(allocated);
-    setStep(4);
+    setCurrentStep(4);
+  };
+
+  const handleStepClick = (step: number) => {
+    if (step < currentStep) {
+      setCurrentStep(step);
+    }
   };
 
   return (
     <div className="min-h-screen bg-background">
       <div className="no-print">
-        <StepIndicator currentStep={step} />
+        <StepIndicator currentStep={currentStep} onStepClick={handleStepClick} />
       </div>
       <div className="pb-16">
-        {step === 1 && <UploadScreen onComplete={handleUploadComplete} />}
-        {step === 2 && (
+        {currentStep === 1 && (
+          <UploadScreen
+            onComplete={handleUploadComplete}
+            initialFiles={uploadedFiles}
+          />
+        )}
+        {currentStep === 2 && (
           <VerificationScreen
             students={students}
             pdfResults={pdfResults}
             totalPdfs={totalPdfs}
             onConfirm={handleVerifyConfirm}
-            onBack={() => setStep(1)}
+            onBack={() => setCurrentStep(1)}
           />
         )}
-        {step === 3 && (
+        {currentStep === 3 && (
           <RoomConfigScreen
             totalStudents={students.length}
             onGenerate={handleGenerate}
+            onBack={() => setCurrentStep(2)}
           />
         )}
-        {step === 4 && <SeatingResultScreen rooms={rooms} config={roomConfig} />}
+        {currentStep === 4 && (
+          <SeatingResultScreen
+            rooms={rooms}
+            config={roomConfig}
+            onBack={() => setCurrentStep(3)}
+          />
+        )}
       </div>
     </div>
   );

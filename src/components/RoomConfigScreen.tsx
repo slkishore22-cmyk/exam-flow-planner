@@ -5,9 +5,10 @@ import { RoomConfig } from '@/lib/seating-utils';
 interface RoomConfigScreenProps {
   totalStudents: number;
   onGenerate: (config: RoomConfig) => void;
+  onBack: () => void;
 }
 
-const RoomConfigScreen: React.FC<RoomConfigScreenProps> = ({ totalStudents, onGenerate }) => {
+const RoomConfigScreen: React.FC<RoomConfigScreenProps> = ({ totalStudents, onGenerate, onBack }) => {
   const [studentsPerRoom, setStudentsPerRoom] = useState(45);
   const [mainColumns, setMainColumns] = useState(3);
   const [seatsPerColumn, setSeatsPerColumn] = useState(3);
@@ -18,6 +19,9 @@ const RoomConfigScreen: React.FC<RoomConfigScreenProps> = ({ totalStudents, onGe
 
   return (
     <div className="max-w-lg mx-auto px-4">
+      <Button variant="outline" onClick={onBack} className="rounded-xl px-6 h-10 text-sm mb-6">
+        ← Back
+      </Button>
       <h2 className="text-2xl font-bold text-center mb-10">Room Configuration</h2>
 
       <div className="space-y-8">
