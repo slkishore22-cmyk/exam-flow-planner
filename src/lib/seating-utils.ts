@@ -63,56 +63,66 @@ export function detectDepartment(rollNumber: string): string {
   return 'GEN';
 }
 
-function extractRollNumbersFromText(text: string): string[] {
-  const results: string[] = [];
-  const lines = text.split('\n');
-  
-  for (const line of lines) {
-    const trimmed = line.trim();
-    const match = trimmed.match(
-      /^(\d{1,3})\s+([A-Z]{0,3}\d{5,9})\s+[A-Z]/
-    );
-    if (match) {
-      results.push(match[2]);
-    }
-  }
-  return results;
-}
-
 export async function extractRollNumbersFromPdf(
   file: File,
   onProgress: (page: number, total: number, fileName: string) => void
 ): Promise<PdfExtractionResult> {
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+  const pdf = await loadingTask.promise;
   const totalPages = pdf.numPages;
-  
-  let allText = '';
+
+  const rollNumbers: string[] = [];
   let declaredCount: number | null = null;
-  
-  for (let i = 1; i <= totalPages; i++) {
-    onProgress(i, totalPages, file.name);
-    const page = await pdf.getPage(i);
+
+  for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+    onProgress(pageNum, totalPages, file.name);
+    const page = await pdf.getPage(pageNum);
     const content = await page.getTextContent();
-    const pageText = content.items.map((item: any) => item.str).join(' ');
-    allText += pageText + '\n';
-    
-    // Try to find declared count in first 2 pages
-    if (i <= 2 && declaredCount === null) {
-      const countMatch = pageText.match(/No\.?\s*of\s*Candidates\s*[:\-]?\s*(\d+)/i);
-      if (countMatch) {
-        declaredCount = parseInt(countMatch[1], 10);
+
+    // Group text items by their Y coordinate (rounded to nearest 5px)
+    // This reconstructs rows from the PDF table
+    const rows: Record<number, { x: number; text: string }[]> = {};
+    for (const item of content.items as any[]) {
+      if (!item.str.trim()) continue;
+      const y = Math.round(item.transform[5] / 5) * 5;
+      if (!rows[y]) rows[y] = [];
+      rows[y].push({ x: item.transform[4], text: item.str.trim() });
+    }
+
+    // Sort rows by Y descending (PDF coordinates go bottom to top)
+    const sortedYs = Object.keys(rows).map(Number).sort((a, b) => b - a);
+
+    // Reconstruct full text lines sorted by x within each row
+    const lines = sortedYs.map(y => {
+      return rows[y]
+        .sort((a, b) => a.x - b.x)
+        .map(item => item.text)
+        .join(' ');
+    });
+
+    // Now extract from clean lines
+    for (const line of lines) {
+      // Get declared count from header
+      const declaredMatch = line.match(/No of Candidates\s*[:\-]?\s*(\d+)/i);
+      if (declaredMatch) {
+        declaredCount = (declaredCount || 0) + parseInt(declaredMatch[1], 10);
+      }
+
+      // Extract roll number: line must start with serial number
+      // then roll number, then student name
+      const rollMatch = line.match(/^(\d{1,3})\s+([A-Z]{0,3}\d{5,9})\s+[A-Z]/);
+      if (rollMatch) {
+        rollNumbers.push(rollMatch[2]);
       }
     }
   }
-  
-  const allRollNumbers = extractRollNumbersFromText(allText);
-  
+
   return {
     fileName: file.name,
-    rollNumbers: allRollNumbers,
+    rollNumbers,
     declaredCount,
-    extractedCount: allRollNumbers.length,
+    extractedCount: rollNumbers.length,
   };
 }
 
