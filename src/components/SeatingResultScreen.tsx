@@ -5,9 +5,10 @@ import { RoomAllocation, RoomConfig, getDeptColor } from '@/lib/seating-utils';
 interface SeatingResultScreenProps {
   rooms: RoomAllocation[];
   config: RoomConfig;
+  onBack: () => void;
 }
 
-const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config }) => {
+const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, onBack }) => {
   const [activeRoom, setActiveRoom] = useState(0);
   const printRef = useRef<HTMLDivElement>(null);
 
