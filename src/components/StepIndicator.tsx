@@ -2,16 +2,22 @@ import React from 'react';
 
 interface StepIndicatorProps {
   currentStep: number;
+  onStepClick: (step: number) => void;
 }
 
 const STEPS = ['Upload', 'Verify', 'Configure', 'Allocate'];
 
-const StepIndicator: React.FC<StepIndicatorProps> = ({ currentStep }) => {
+const StepIndicator: React.FC<StepIndicatorProps> = ({ currentStep, onStepClick }) => {
   return (
     <div className="flex items-center justify-center gap-2 py-8">
       {STEPS.map((step, i) => (
         <React.Fragment key={step}>
-          <div className="flex items-center gap-2">
+          <div
+            className={`flex items-center gap-2 ${i + 1 < currentStep ? 'cursor-pointer' : ''}`}
+            onClick={() => {
+              if (i + 1 < currentStep) onStepClick(i + 1);
+            }}
+          >
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
                 i + 1 === currentStep

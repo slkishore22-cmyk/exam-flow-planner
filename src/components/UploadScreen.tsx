@@ -4,10 +4,11 @@ import { extractRollNumbersFromPdf, PdfExtractionResult } from '@/lib/seating-ut
 
 interface UploadScreenProps {
   onComplete: (results: PdfExtractionResult[], files: File[]) => void;
+  initialFiles?: File[];
 }
 
-const UploadScreen: React.FC<UploadScreenProps> = ({ onComplete }) => {
-  const [files, setFiles] = useState<File[]>([]);
+const UploadScreen: React.FC<UploadScreenProps> = ({ onComplete, initialFiles = [] }) => {
+  const [files, setFiles] = useState<File[]>(initialFiles);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState('');

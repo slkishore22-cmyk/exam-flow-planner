@@ -84,6 +84,11 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
 
   return (
     <div className="max-w-5xl mx-auto px-4">
+      <div className="no-print">
+        <Button variant="outline" onClick={onBack} className="rounded-xl px-6 h-10 text-sm mb-6">
+          ← Back
+        </Button>
+      </div>
       {/* Room tabs - no-print */}
       <div className="no-print flex flex-wrap gap-2 mb-6 justify-center">
         {rooms.map((room, i) => (
