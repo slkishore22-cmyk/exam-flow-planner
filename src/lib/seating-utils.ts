@@ -159,30 +159,40 @@ export function deduplicateStudents(
 }
 
 export function interleaveStudents(students: StudentRecord[]): StudentRecord[] {
+  // Group by department
   const deptMap: Record<string, StudentRecord[]> = {};
   for (const s of students) {
     if (!deptMap[s.department]) deptMap[s.department] = [];
     deptMap[s.department].push(s);
   }
 
+  // Sort departments by count descending
   const queues = Object.entries(deptMap)
     .sort((a, b) => b[1].length - a[1].length)
     .map(([, list]) => [...list]);
 
-  const interleaved: StudentRecord[] = [];
-  let hasStudents = true;
+  // Round robin with rotating index that persists across iterations
+  const result: StudentRecord[] = [];
+  let i = 0;
 
-  while (hasStudents) {
-    hasStudents = false;
-    for (const queue of queues) {
-      if (queue.length > 0) {
-        interleaved.push(queue.shift()!);
-        hasStudents = true;
+  while (result.length < students.length) {
+    let added = false;
+    const startI = i;
+
+    do {
+      if (queues[i] && queues[i].length > 0) {
+        result.push(queues[i].shift()!);
+        added = true;
+        i = (i + 1) % queues.length;
+        break;
       }
-    }
+      i = (i + 1) % queues.length;
+    } while (i !== startI);
+
+    if (!added) break;
   }
 
-  return interleaved;
+  return result;
 }
 
 export function allocateRooms(
