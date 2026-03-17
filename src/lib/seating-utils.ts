@@ -8,8 +8,8 @@ export interface StudentRecord {
 
 export interface PdfExtractionResult {
   fileName: string;
-  rollNumbers: string[];
-  declaredCount: number | null;
+  rollNumbers: { roll: string; dept: string }[];
+  declaredCount: number;
   extractedCount: number;
 }
 
@@ -27,49 +27,36 @@ export interface RoomAllocation {
   seatsPerRow: number;
 }
 
-// Dark rich colors for departments
-const DEPT_COLORS: { bg: string; text: string }[] = [
-  { bg: '#1B4332', text: '#FFFFFF' },  // Deep forest green
-  { bg: '#1E3A5F', text: '#FFFFFF' },  // Deep navy blue
-  { bg: '#4A1942', text: '#FFFFFF' },  // Deep purple
-  { bg: '#7B2D00', text: '#FFFFFF' },  // Deep burnt orange
-  { bg: '#1A3A4A', text: '#FFFFFF' },  // Deep teal
-  { bg: '#3D1A00', text: '#FFFFFF' },  // Deep brown
-  { bg: '#0D3B2E', text: '#FFFFFF' },  // Dark emerald
-  { bg: '#2C1654', text: '#FFFFFF' },  // Deep violet
-  { bg: '#4A0E0E', text: '#FFFFFF' },  // Deep crimson
-  { bg: '#1A2E1A', text: '#FFFFFF' },  // Dark olive
-  { bg: '#003366', text: '#FFFFFF' },  // Royal blue
-  { bg: '#4A3000', text: '#FFFFFF' },  // Dark gold
-  { bg: '#2D4A00', text: '#FFFFFF' },  // Dark lime
-  { bg: '#4A0030', text: '#FFFFFF' },  // Deep magenta
-  { bg: '#002B36', text: '#FFFFFF' },  // Dark cyan
-];
-
-// Stable department list for consistent color assignment
-let knownDepts: string[] = [];
-
-export function resetDeptColors() {
-  knownDepts = [];
-}
+// Fixed degree color map
+const DEGREE_COLORS: Record<string, { bg: string; text: string }> = {
+  'BBA':         { bg: '#1B4332', text: '#FFFFFF' },
+  'B.COM.':      { bg: '#1E3A5F', text: '#FFFFFF' },
+  'B.SC.':       { bg: '#4A1942', text: '#FFFFFF' },
+  'B.A':         { bg: '#7B2D00', text: '#FFFFFF' },
+  'MA':          { bg: '#1A3A4A', text: '#FFFFFF' },
+  'B.COM.(CS)':  { bg: '#3D1A00', text: '#FFFFFF' },
+  'BSC[VC]':     { bg: '#0D3B2E', text: '#FFFFFF' },
+  'M.COM.':      { bg: '#2C1654', text: '#FFFFFF' },
+  'M.SC.':       { bg: '#4A0E0E', text: '#FFFFFF' },
+  'UNKNOWN':     { bg: '#333333', text: '#FFFFFF' },
+};
 
 export function getDeptColor(dept: string): { bg: string; text: string } {
-  if (!knownDepts.includes(dept)) {
-    knownDepts.push(dept);
-  }
-  const index = knownDepts.indexOf(dept) % DEPT_COLORS.length;
-  return DEPT_COLORS[index];
-}
+  // Exact match first
+  if (DEGREE_COLORS[dept]) return DEGREE_COLORS[dept];
 
-export function detectDepartment(rollNumber: string): string {
-  const match = rollNumber.match(/^([A-Z]+)/);
-  if (match) {
-    return match[1];
+  // Fuzzy match for variations
+  const normalized = dept.toUpperCase().replace(/\s+/g, '');
+  for (const [key, value] of Object.entries(DEGREE_COLORS)) {
+    if (normalized.includes(key.replace(/\./g, '').replace(/\s+/g, ''))) {
+      return value;
+    }
   }
-  if (/^\d+$/.test(rollNumber) && rollNumber.length >= 5) {
-    return rollNumber.substring(2, 5);
-  }
-  return 'GEN';
+
+  // Fallback using hash
+  const hash = dept.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const fallbacks = ['#1A2E4A', '#2E1A4A', '#4A2E1A', '#1A4A2E', '#4A1A2E'];
+  return { bg: fallbacks[hash % fallbacks.length], text: '#FFFFFF' };
 }
 
 export async function extractRollNumbersFromPdf(
@@ -81,8 +68,9 @@ export async function extractRollNumbersFromPdf(
   const pdf = await loadingTask.promise;
   const totalPages = pdf.numPages;
 
-  const rollNumbers: string[] = [];
-  let declaredCount: number | null = null;
+  const rollNumbers: { roll: string; dept: string }[] = [];
+  let declaredCount = 0;
+  let currentDegree = 'UNKNOWN';
 
   for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
     onProgress(pageNum, totalPages, file.name);
@@ -98,32 +86,53 @@ export async function extractRollNumbersFromPdf(
     }
 
     const sortedYs = Object.keys(rows).map(Number).sort((a, b) => b - a);
+    const lines = sortedYs.map(y =>
+      rows[y].sort((a, b) => a.x - b.x).map(i => i.text).join(' ')
+    );
 
-    const lines = sortedYs.map(y => {
-      return rows[y]
-        .sort((a, b) => a.x - b.x)
-        .map(item => item.text)
-        .join(' ');
-    });
+    const pageText = lines.join(' ');
 
-    for (const line of lines) {
-      const declaredMatch = line.match(/No of Candidates\s*[:\-]?\s*(\d+)/i);
+    // Read degree from page header
+    const degreeMatch = pageText.match(
+      /Degree\s*[:\-]\s*([A-Z][A-Z0-9.\(\)\[\]\/\s]{1,20}?)\s+Subject/i
+    );
+    if (degreeMatch) {
+      currentDegree = degreeMatch[1].trim().replace(/\s+/g, ' ').toUpperCase();
+    }
+
+    // Only count declared on Page No 1 of each section
+    const isFirstPageOfSection = /Page\s*No\s*[:\-]?\s*1\b/.test(pageText);
+    if (isFirstPageOfSection) {
+      const declaredMatch = pageText.match(/No\s+of\s+Candidates\s*[:\-]?\s*(\d+)/i);
       if (declaredMatch) {
-        declaredCount = (declaredCount || 0) + parseInt(declaredMatch[1], 10);
+        declaredCount += parseInt(declaredMatch[1], 10);
       }
+    }
 
+    // Extract roll numbers tagged with degree from this page
+    for (const line of lines) {
       const rollMatch = line.match(/^(\d{1,3})\s+([A-Z]{0,3}\d{5,9})\s+[A-Z]/);
       if (rollMatch) {
-        rollNumbers.push(rollMatch[2]);
+        rollNumbers.push({ roll: rollMatch[2], dept: currentDegree });
       }
+    }
+  }
+
+  // Deduplicate by roll number keeping first occurrence
+  const seen = new Set<string>();
+  const uniqueRolls: { roll: string; dept: string }[] = [];
+  for (const entry of rollNumbers) {
+    if (!seen.has(entry.roll)) {
+      seen.add(entry.roll);
+      uniqueRolls.push(entry);
     }
   }
 
   return {
     fileName: file.name,
-    rollNumbers,
     declaredCount,
-    extractedCount: rollNumbers.length,
+    extractedCount: uniqueRolls.length,
+    rollNumbers: uniqueRolls,
   };
 }
 
@@ -132,37 +141,34 @@ export function deduplicateStudents(
 ): StudentRecord[] {
   const seen = new Set<string>();
   const students: StudentRecord[] = [];
-  
+
   for (const result of results) {
-    for (const rn of result.rollNumbers) {
-      if (!seen.has(rn)) {
-        seen.add(rn);
+    for (const entry of result.rollNumbers) {
+      if (!seen.has(entry.roll)) {
+        seen.add(entry.roll);
         students.push({
-          rollNumber: rn,
-          department: detectDepartment(rn),
+          rollNumber: entry.roll,
+          department: entry.dept,
           sourcePdf: result.fileName,
         });
       }
     }
   }
-  
+
   return students;
 }
 
 export function interleaveStudents(students: StudentRecord[]): StudentRecord[] {
-  // Step 1: Group by department
   const deptMap: Record<string, StudentRecord[]> = {};
   for (const s of students) {
     if (!deptMap[s.department]) deptMap[s.department] = [];
     deptMap[s.department].push(s);
   }
 
-  // Step 2: Sort departments by size largest first
   const queues = Object.entries(deptMap)
     .sort((a, b) => b[1].length - a[1].length)
     .map(([, list]) => [...list]);
 
-  // Step 3: Round robin interleave
   const interleaved: StudentRecord[] = [];
   let hasStudents = true;
 

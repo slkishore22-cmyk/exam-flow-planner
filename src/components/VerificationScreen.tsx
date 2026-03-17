@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { StudentRecord, PdfExtractionResult, getDeptColor, detectDepartment } from '@/lib/seating-utils';
+import { StudentRecord, PdfExtractionResult, getDeptColor } from '@/lib/seating-utils';
 
 interface VerificationScreenProps {
   students: StudentRecord[];
@@ -42,7 +42,7 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
     const rn = newRoll.trim().toUpperCase();
     if (!rn) return;
     if (students.some(s => s.rollNumber === rn)) return;
-    setStudents(prev => [...prev, { rollNumber: rn, department: detectDepartment(rn), sourcePdf: 'Manual' }]);
+    setStudents(prev => [...prev, { rollNumber: rn, department: 'UNKNOWN', sourcePdf: 'Manual' }]);
     setNewRoll('');
   };
 
