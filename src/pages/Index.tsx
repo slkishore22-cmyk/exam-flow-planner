@@ -40,7 +40,7 @@ const Index = () => {
   const handleGenerate = (config: RoomConfig) => {
     setRoomConfig(config);
     const interleaved = interleaveStudents([...students]);
-    const allocated = allocateRooms(interleaved, config.studentsPerRoom);
+    const allocated = allocateRooms(interleaved, config);
     setRooms(allocated);
     setCurrentStep(4);
   };
