@@ -52,6 +52,10 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
 
   return (
     <div className="max-w-4xl mx-auto px-4">
+      <Button variant="outline" onClick={onBack} className="rounded-xl px-6 h-10 text-sm mb-6 border-foreground text-foreground bg-background hover:bg-secondary">
+        ← Back
+      </Button>
+
       {/* Stat cards */}
       <div className="grid grid-cols-3 gap-6 mb-8">
         {[
@@ -93,29 +97,32 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
               </tr>
             </thead>
             <tbody>
-              {students.map((s, i) => (
-                <tr key={s.rollNumber} className="border-t">
-                  <td className="p-3">{i + 1}</td>
-                  <td className="p-3 font-mono">{s.rollNumber}</td>
-                  <td className="p-3">
-                    <span
-                      className="inline-block px-2 py-0.5 rounded text-xs font-medium"
-                      style={{ backgroundColor: getDeptColor(s.department) }}
-                    >
-                      {s.department}
-                    </span>
-                  </td>
-                  <td className="p-3 text-muted-foreground truncate max-w-[200px]">{s.sourcePdf}</td>
-                  <td className="p-3">
-                    <button
-                      onClick={() => handleDelete(s.rollNumber)}
-                      className="text-muted-foreground hover:text-destructive text-xs"
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {students.map((s, i) => {
+                const color = getDeptColor(s.department);
+                return (
+                  <tr key={s.rollNumber} className="border-t">
+                    <td className="p-3">{i + 1}</td>
+                    <td className="p-3 font-mono">{s.rollNumber}</td>
+                    <td className="p-3">
+                      <span
+                        className="inline-block px-2.5 py-1 rounded text-xs font-semibold"
+                        style={{ backgroundColor: color.bg, color: color.text }}
+                      >
+                        {s.department}
+                      </span>
+                    </td>
+                    <td className="p-3 text-muted-foreground truncate max-w-[200px]">{s.sourcePdf}</td>
+                    <td className="p-3">
+                      <button
+                        onClick={() => handleDelete(s.rollNumber)}
+                        className="text-muted-foreground hover:text-destructive text-xs"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -125,16 +132,19 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
       <div className="mb-6 p-4 bg-secondary rounded-2xl">
         <p className="text-sm font-semibold mb-3">Department Summary</p>
         <div className="flex flex-wrap gap-4">
-          {deptSummary.map(([dept, count]) => (
-            <div key={dept} className="flex items-center gap-2 text-sm">
-              <span
-                className="w-3 h-3 rounded-full inline-block"
-                style={{ backgroundColor: getDeptColor(dept) }}
-              />
-              <span className="font-medium">{dept}</span>
-              <span className="text-muted-foreground">({count})</span>
-            </div>
-          ))}
+          {deptSummary.map(([dept, count]) => {
+            const color = getDeptColor(dept);
+            return (
+              <div key={dept} className="flex items-center gap-2 text-sm">
+                <span
+                  className="w-3.5 h-3.5 rounded-full inline-block"
+                  style={{ backgroundColor: color.bg }}
+                />
+                <span className="font-medium">{dept}</span>
+                <span className="text-muted-foreground">({count})</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -155,9 +165,6 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
 
       {/* Actions */}
       <div className="flex justify-end gap-3">
-        <Button variant="outline" onClick={onBack} className="rounded-xl px-8 h-11">
-          Edit
-        </Button>
         <Button onClick={() => onConfirm(students)} className="rounded-xl px-8 h-11">
           Confirm and Continue
         </Button>
