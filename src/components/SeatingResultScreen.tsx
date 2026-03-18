@@ -136,6 +136,22 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         ))}
       </div>
 
+      {/* Color legend */}
+      <div className="no-print mb-6 p-4 bg-secondary rounded-2xl">
+        <p className="text-sm font-bold mb-3 tracking-wide uppercase">Color Legend</p>
+        <div className="flex flex-wrap gap-4">
+          {allDepts.map(dept => {
+            const color = getDeptColor(dept);
+            return (
+              <div key={dept} className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded inline-block" style={{ backgroundColor: color.bg }} />
+                <span className="text-sm font-semibold">{dept}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Active room grid */}
       <div className="no-print">
         <h3 className="text-xl font-bold text-center mb-4">
