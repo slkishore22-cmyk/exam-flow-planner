@@ -20,6 +20,13 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     window.print();
   };
 
+  // Collect unique departments across all rooms for legend
+  const allDepts = React.useMemo(() => {
+    const set = new Set<string>();
+    rooms.forEach(r => r.students.forEach(s => set.add(s.department)));
+    return Array.from(set);
+  }, [rooms]);
+
   const renderRoomGrid = (room: RoomAllocation, forPrint = false) => {
     return (
       <table className="border-collapse mx-auto" style={{ borderSpacing: 0 }}>
@@ -31,7 +38,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                   <th
                     key={`${mc}-${sc}`}
                     className="border border-border px-2 py-2 text-xs font-semibold bg-secondary text-secondary-foreground"
-                    style={{ minWidth: 80 }}
+                    style={{ minWidth: 90 }}
                   >
                     {mc * config.seatsPerColumn + sc + 1}
                   </th>
@@ -58,17 +65,11 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 const cell = (
                   <td
                     key={`${rowIdx}-${colIdx}`}
-                    className={`border text-center align-middle ${
-                      forPrint
-                        ? 'border-black'
-                        : 'border-border'
-                    }`}
+                    className="border-2 border-white text-center align-middle"
                     style={{
-                      minWidth: 80,
-                      height: 55,
-                      backgroundColor: forPrint
-                        ? '#FFFFFF'
-                        : student
+                      minWidth: 90,
+                      height: 65,
+                      backgroundColor: student
                         ? color!.bg
                         : 'hsl(var(--muted))',
                       padding: '4px 6px',
@@ -76,33 +77,13 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                   >
                     {student ? (
                       <div className="flex flex-col items-center justify-center gap-0">
-                        <span
-                          style={{
-                            fontSize: 9,
-                            opacity: forPrint ? 1 : 0.8,
-                            color: forPrint ? '#000' : color!.text,
-                            fontWeight: 500,
-                          }}
-                        >
+                        <span style={{ fontSize: 9, color: color!.text, fontWeight: 500 }}>
                           {student.department}
                         </span>
-                        <span
-                          style={{
-                            fontSize: 9,
-                            fontWeight: 700,
-                            color: forPrint ? '#555' : '#D4AF37',
-                          }}
-                        >
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#FFD700' }}>
                           {student.examCode}
                         </span>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color: forPrint ? '#000' : color!.text,
-                            fontFamily: 'monospace',
-                          }}
-                        >
+                        <span style={{ fontSize: 12, fontWeight: 700, color: color!.text, fontFamily: 'monospace' }}>
                           {student.rollNumber}
                         </span>
                       </div>
