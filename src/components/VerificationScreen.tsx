@@ -25,12 +25,15 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
     [pdfResults]
   );
 
+  // Group by department + examCode
   const deptSummary = useMemo(() => {
-    const map: Record<string, number> = {};
+    const map: Record<string, { dept: string; examCode: string; count: number }> = {};
     students.forEach(s => {
-      map[s.department] = (map[s.department] || 0) + 1;
+      const key = `${s.department}||${s.examCode}`;
+      if (!map[key]) map[key] = { dept: s.department, examCode: s.examCode, count: 0 };
+      map[key].count++;
     });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+    return Object.values(map).sort((a, b) => b.count - a.count);
   }, [students]);
 
   const mismatches = useMemo(
@@ -42,7 +45,7 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
     const rn = newRoll.trim().toUpperCase();
     if (!rn) return;
     if (students.some(s => s.rollNumber === rn)) return;
-    setStudents(prev => [...prev, { rollNumber: rn, department: 'UNKNOWN', sourcePdf: 'Manual' }]);
+    setStudents(prev => [...prev, { rollNumber: rn, department: 'UNKNOWN', examCode: 'UNKNOWN', sourcePdf: 'Manual' }]);
     setNewRoll('');
   };
 
@@ -51,7 +54,7 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4">
+    <div className="max-w-5xl mx-auto px-4">
       <Button variant="outline" onClick={onBack} className="rounded-xl px-6 h-10 text-sm mb-6 border-foreground text-foreground bg-background hover:bg-secondary">
         ← Back
       </Button>
@@ -92,6 +95,7 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
                 <th className="text-left p-3 font-medium">S.No</th>
                 <th className="text-left p-3 font-medium">Roll Number</th>
                 <th className="text-left p-3 font-medium">Department</th>
+                <th className="text-left p-3 font-medium">Exam Code</th>
                 <th className="text-left p-3 font-medium">Source PDF</th>
                 <th className="p-3 w-10"></th>
               </tr>
@@ -111,6 +115,7 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
                         {s.department}
                       </span>
                     </td>
+                    <td className="p-3 font-mono font-semibold" style={{ color: '#D4AF37' }}>{s.examCode}</td>
                     <td className="p-3 text-muted-foreground truncate max-w-[200px]">{s.sourcePdf}</td>
                     <td className="p-3">
                       <button
@@ -128,20 +133,21 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
         </div>
       </div>
 
-      {/* Department summary */}
+      {/* Department summary — grouped by dept + examCode */}
       <div className="mb-6 p-4 bg-secondary rounded-2xl">
         <p className="text-sm font-semibold mb-3">Department Summary</p>
-        <div className="flex flex-wrap gap-4">
-          {deptSummary.map(([dept, count]) => {
-            const color = getDeptColor(dept);
+        <div className="flex flex-col gap-2">
+          {deptSummary.map((entry) => {
+            const color = getDeptColor(entry.dept);
             return (
-              <div key={dept} className="flex items-center gap-2 text-sm">
+              <div key={`${entry.dept}-${entry.examCode}`} className="flex items-center gap-3 text-sm">
                 <span
-                  className="w-3.5 h-3.5 rounded-full inline-block"
+                  className="w-3.5 h-3.5 rounded-full inline-block flex-shrink-0"
                   style={{ backgroundColor: color.bg }}
                 />
-                <span className="font-medium">{dept}</span>
-                <span className="text-muted-foreground">({count})</span>
+                <span className="font-medium w-24">{entry.dept}</span>
+                <span className="font-mono font-semibold w-20" style={{ color: '#D4AF37' }}>{entry.examCode}</span>
+                <span className="text-muted-foreground">{entry.count} students</span>
               </div>
             );
           })}
