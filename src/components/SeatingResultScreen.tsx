@@ -65,7 +65,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                     }`}
                     style={{
                       minWidth: 80,
-                      height: 50,
+                      height: 55,
                       backgroundColor: forPrint
                         ? '#FFFFFF'
                         : student
