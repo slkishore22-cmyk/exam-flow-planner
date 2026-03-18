@@ -75,16 +75,25 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                     }}
                   >
                     {student ? (
-                      <div className="flex flex-col items-center justify-center gap-0.5">
+                      <div className="flex flex-col items-center justify-center gap-0">
                         <span
                           style={{
                             fontSize: 9,
-                            opacity: forPrint ? 1 : 0.7,
+                            opacity: forPrint ? 1 : 0.8,
                             color: forPrint ? '#000' : color!.text,
                             fontWeight: 500,
                           }}
                         >
                           {student.department}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 9,
+                            fontWeight: 700,
+                            color: forPrint ? '#555' : '#D4AF37',
+                          }}
+                        >
+                          {student.examCode}
                         </span>
                         <span
                           style={{
