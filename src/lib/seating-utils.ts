@@ -3,12 +3,13 @@ declare const pdfjsLib: any;
 export interface StudentRecord {
   rollNumber: string;
   department: string;
+  examCode: string;
   sourcePdf: string;
 }
 
 export interface PdfExtractionResult {
   fileName: string;
-  rollNumbers: { roll: string; dept: string }[];
+  rollNumbers: { roll: string; dept: string; examCode: string }[];
   declaredCount: number;
   extractedCount: number;
 }
