@@ -159,6 +159,7 @@ export function deduplicateStudents(
         students.push({
           rollNumber: entry.roll,
           department: entry.dept,
+          examCode: entry.examCode,
           sourcePdf: result.fileName,
         });
       }
