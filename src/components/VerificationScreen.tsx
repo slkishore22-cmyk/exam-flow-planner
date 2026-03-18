@@ -142,7 +142,7 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
             return (
               <div key={`${entry.dept}-${entry.examCode}`} className="flex items-center gap-3 text-sm">
                 <span
-                  className="w-3.5 h-3.5 rounded-full inline-block flex-shrink-0"
+                  className="w-5 h-5 rounded inline-block flex-shrink-0"
                   style={{ backgroundColor: color.bg }}
                 />
                 <span className="font-medium w-24">{entry.dept}</span>

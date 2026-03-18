@@ -28,36 +28,65 @@ export interface RoomAllocation {
   seatsPerRow: number;
 }
 
-// Fixed degree color map
-const DEGREE_COLORS: Record<string, { bg: string; text: string }> = {
-  'BBA':         { bg: '#1B4332', text: '#FFFFFF' },
-  'B.COM.':      { bg: '#1E3A5F', text: '#FFFFFF' },
-  'B.SC.':       { bg: '#4A1942', text: '#FFFFFF' },
-  'B.A':         { bg: '#7B2D00', text: '#FFFFFF' },
-  'MA':          { bg: '#1A3A4A', text: '#FFFFFF' },
-  'B.COM.(CS)':  { bg: '#3D1A00', text: '#FFFFFF' },
-  'BSC[VC]':     { bg: '#0D3B2E', text: '#FFFFFF' },
-  'M.COM.':      { bg: '#2C1654', text: '#FFFFFF' },
-  'M.SC.':       { bg: '#4A0E0E', text: '#FFFFFF' },
-  'UNKNOWN':     { bg: '#333333', text: '#FFFFFF' },
+// Maximum color distance palette for unknown departments
+const DEPT_COLOR_PALETTE = [
+  { bg: '#D32F2F', text: '#FFFFFF', name: 'Red' },
+  { bg: '#1565C0', text: '#FFFFFF', name: 'Blue' },
+  { bg: '#2E7D32', text: '#FFFFFF', name: 'Green' },
+  { bg: '#F57F17', text: '#000000', name: 'Amber' },
+  { bg: '#6A1B9A', text: '#FFFFFF', name: 'Purple' },
+  { bg: '#00838F', text: '#FFFFFF', name: 'Cyan' },
+  { bg: '#BF360C', text: '#FFFFFF', name: 'Deep Orange' },
+  { bg: '#283593', text: '#FFFFFF', name: 'Indigo' },
+  { bg: '#558B2F', text: '#FFFFFF', name: 'Olive Green' },
+  { bg: '#E91E63', text: '#FFFFFF', name: 'Pink' },
+  { bg: '#004D40', text: '#FFFFFF', name: 'Teal' },
+  { bg: '#E65100', text: '#FFFFFF', name: 'Burnt Orange' },
+  { bg: '#880E4F', text: '#FFFFFF', name: 'Dark Pink' },
+  { bg: '#1A237E', text: '#FFFFFF', name: 'Deep Navy' },
+  { bg: '#33691E', text: '#FFFFFF', name: 'Dark Lime' },
+];
+
+// Fixed color assignments for known University of Madras departments
+const FIXED_DEPT_COLORS: Record<string, { bg: string; text: string }> = {
+  'BBA':          { bg: '#D32F2F', text: '#FFFFFF' },
+  'B.COM.':       { bg: '#1565C0', text: '#FFFFFF' },
+  'B.SC.':        { bg: '#2E7D32', text: '#FFFFFF' },
+  'B.A':          { bg: '#F57F17', text: '#000000' },
+  'MA':           { bg: '#6A1B9A', text: '#FFFFFF' },
+  'B.COM.(CS)':   { bg: '#00838F', text: '#FFFFFF' },
+  'BSC[VC]':      { bg: '#BF360C', text: '#FFFFFF' },
+  'M.COM.':       { bg: '#880E4F', text: '#FFFFFF' },
+  'M.SC.':        { bg: '#004D40', text: '#FFFFFF' },
+  'B.COM.(CA)':   { bg: '#283593', text: '#FFFFFF' },
+  'UNKNOWN':      { bg: '#424242', text: '#FFFFFF' },
 };
 
-export function getDeptColor(dept: string): { bg: string; text: string } {
-  // Exact match first
-  if (DEGREE_COLORS[dept]) return DEGREE_COLORS[dept];
+// Dynamic color map for unknown departments
+const deptColorMap: Record<string, { bg: string; text: string }> = {};
 
-  // Fuzzy match for variations
-  const normalized = dept.toUpperCase().replace(/\s+/g, '');
-  for (const [key, value] of Object.entries(DEGREE_COLORS)) {
-    if (normalized.includes(key.replace(/\./g, '').replace(/\s+/g, ''))) {
+export function getDeptColor(dept: string): { bg: string; text: string } {
+  // Exact match
+  if (FIXED_DEPT_COLORS[dept]) return FIXED_DEPT_COLORS[dept];
+
+  // Normalize and fuzzy match
+  const clean = dept.toUpperCase().replace(/\s+/g, '').replace(/\.$/, '');
+  for (const [key, value] of Object.entries(FIXED_DEPT_COLORS)) {
+    const cleanKey = key.toUpperCase().replace(/\s+/g, '').replace(/\.$/, '');
+    if (clean === cleanKey || clean.includes(cleanKey) || cleanKey.includes(clean)) {
       return value;
     }
   }
 
-  // Fallback using hash
-  const hash = dept.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const fallbacks = ['#1A2E4A', '#2E1A4A', '#4A2E1A', '#1A4A2E', '#4A1A2E'];
-  return { bg: fallbacks[hash % fallbacks.length], text: '#FFFFFF' };
+  // Dynamic assignment for completely unknown departments
+  if (!deptColorMap[dept]) {
+    const usedColors = Object.values(deptColorMap).map(c => c.bg);
+    const available = DEPT_COLOR_PALETTE.filter(c => !usedColors.includes(c.bg));
+    deptColorMap[dept] = available.length > 0
+      ? available[0]
+      : DEPT_COLOR_PALETTE[Object.keys(deptColorMap).length % DEPT_COLOR_PALETTE.length];
+  }
+  return deptColorMap[dept];
 }
 
 export async function extractRollNumbersFromPdf(
