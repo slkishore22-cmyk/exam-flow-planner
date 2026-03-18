@@ -12,6 +12,14 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const [activeRoom, setActiveRoom] = useState(0);
   const printRef = useRef<HTMLDivElement>(null);
 
+  // Collect unique departments across all rooms for legend
+  const allDepts = React.useMemo(() => {
+    if (!rooms || rooms.length === 0) return [];
+    const set = new Set<string>();
+    rooms.forEach(r => r.students.forEach(s => set.add(s.department)));
+    return Array.from(set);
+  }, [rooms]);
+
   if (!rooms || rooms.length === 0) {
     return <div className="text-center py-20 text-muted-foreground">No rooms to display.</div>;
   }
@@ -19,13 +27,6 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const handlePrint = () => {
     window.print();
   };
-
-  // Collect unique departments across all rooms for legend
-  const allDepts = React.useMemo(() => {
-    const set = new Set<string>();
-    rooms.forEach(r => r.students.forEach(s => set.add(s.department)));
-    return Array.from(set);
-  }, [rooms]);
 
   const renderRoomGrid = (room: RoomAllocation, forPrint = false) => {
     return (
