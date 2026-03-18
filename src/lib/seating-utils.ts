@@ -69,9 +69,10 @@ export async function extractRollNumbersFromPdf(
   const pdf = await loadingTask.promise;
   const totalPages = pdf.numPages;
 
-  const rollNumbers: { roll: string; dept: string }[] = [];
+  const rollNumbers: { roll: string; dept: string; examCode: string }[] = [];
   let declaredCount = 0;
   let currentDegree = 'UNKNOWN';
+  let currentExamCode = 'UNKNOWN';
 
   for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
     onProgress(pageNum, totalPages, file.name);
@@ -101,6 +102,14 @@ export async function extractRollNumbersFromPdf(
       currentDegree = degreeMatch[1].trim().replace(/\s+/g, ' ').toUpperCase();
     }
 
+    // Read Subject exam code from page header (part before first hyphen)
+    const subjectMatch = pageText.match(
+      /Subject\s*[:\-]\s*([A-Z0-9]{3,8})-/i
+    );
+    if (subjectMatch) {
+      currentExamCode = subjectMatch[1].trim().toUpperCase();
+    }
+
     // Only count declared on Page No 1 of each section
     const isFirstPageOfSection = /Page\s*No\s*[:\-]?\s*1\b/.test(pageText);
     if (isFirstPageOfSection) {
@@ -110,18 +119,18 @@ export async function extractRollNumbersFromPdf(
       }
     }
 
-    // Extract roll numbers tagged with degree from this page
+    // Extract roll numbers tagged with degree AND exam code
     for (const line of lines) {
       const rollMatch = line.match(/^(\d{1,3})\s+([A-Z]{0,3}\d{5,9})\s+[A-Z]/);
       if (rollMatch) {
-        rollNumbers.push({ roll: rollMatch[2], dept: currentDegree });
+        rollNumbers.push({ roll: rollMatch[2], dept: currentDegree, examCode: currentExamCode });
       }
     }
   }
 
   // Deduplicate by roll number keeping first occurrence
   const seen = new Set<string>();
-  const uniqueRolls: { roll: string; dept: string }[] = [];
+  const uniqueRolls: { roll: string; dept: string; examCode: string }[] = [];
   for (const entry of rollNumbers) {
     if (!seen.has(entry.roll)) {
       seen.add(entry.roll);
