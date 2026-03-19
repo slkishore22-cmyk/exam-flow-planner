@@ -240,33 +240,62 @@ function buildCrissCrossOrder(rows: number, mainCols: number, subCols: number) {
   const bPositions: [number, number][] = [];
 
   for (let mc = 0; mc < mainCols; mc++) {
-    // A positions: zigzag down each main column
     for (let row = 0; row < rows; row++) {
       const col = mc * subCols + (row % 2 === 0 ? 0 : subCols - 1);
       aPositions.push([row, col]);
     }
-
-    // B positions: S2 middle column all rows top to bottom
     for (let row = 0; row < rows; row++) {
       bPositions.push([row, mc * subCols + 1]);
     }
-
-    // B positions: S1 left column even rows only (rows 1, 3)
     for (let row = 0; row < rows; row++) {
-      if (row % 2 !== 0) {
-        bPositions.push([row, mc * subCols + 0]);
-      }
+      if (row % 2 !== 0) bPositions.push([row, mc * subCols + 0]);
     }
-
-    // B positions: S3 right column odd rows only (rows 0, 2, 4)
     for (let row = 0; row < rows; row++) {
-      if (row % 2 === 0) {
-        bPositions.push([row, mc * subCols + (subCols - 1)]);
-      }
+      if (row % 2 === 0) bPositions.push([row, mc * subCols + (subCols - 1)]);
     }
   }
 
   return { aPositions, bPositions };
+}
+
+function getNeighborCodes(
+  grid: (StudentRecord | null)[][],
+  row: number,
+  col: number,
+  rows: number,
+  totalCols: number
+): Set<string> {
+  const codes = new Set<string>();
+  const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  for (const [dr, dc] of dirs) {
+    const nr = row + dr;
+    const nc = col + dc;
+    if (nr >= 0 && nr < rows && nc >= 0 && nc < totalCols && grid[nr][nc]) {
+      codes.add(grid[nr][nc]!.examCode);
+    }
+  }
+  return codes;
+}
+
+function pickBest(pool: StudentRecord[], excludeCodes: Set<string>): StudentRecord | null {
+  const byCode: Record<string, StudentRecord[]> = {};
+  for (const s of pool) {
+    if (!byCode[s.examCode]) byCode[s.examCode] = [];
+    byCode[s.examCode].push(s);
+  }
+
+  const candidates = Object.entries(byCode)
+    .filter(([code]) => !excludeCodes.has(code))
+    .sort((a, b) => b[1].length - a[1].length);
+
+  if (candidates.length > 0) {
+    const bestCode = candidates[0][0];
+    const idx = pool.findIndex(s => s.examCode === bestCode);
+    return pool.splice(idx, 1)[0];
+  }
+
+  if (pool.length > 0) return pool.shift()!;
+  return null;
 }
 
 export function allocateRooms(
@@ -285,79 +314,86 @@ export function allocateRooms(
     examGroups[s.examCode].push(s);
   }
   const sortedCodes = Object.entries(examGroups).sort((a, b) => b[1].length - a[1].length);
-  const remainingA: StudentRecord[] = sortedCodes.length > 0 ? [...sortedCodes[0][1]] : [];
-  const remainingB: StudentRecord[] = sortedCodes.slice(1).flatMap(([, list]) => [...list]);
+  const poolA: StudentRecord[] = sortedCodes.length > 0 ? [...sortedCodes[0][1]] : [];
+  const poolB: StudentRecord[] = sortedCodes.slice(1).flatMap(([, list]) => [...list]);
 
-  let currentACode = remainingA.length > 0 ? remainingA[0].examCode : null;
+  let currentACode = poolA.length > 0 ? poolA[0].examCode : null;
 
   const total = students.length;
   const roomsNeeded = Math.ceil(total / studentsPerRoom);
   const rooms: RoomAllocation[] = [];
 
   for (let r = 0; r < roomsNeeded; r++) {
+    const maxSeats = Math.min(studentsPerRoom, total - r * studentsPerRoom);
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
+    let seatedCount = 0;
 
-    // Fill A positions in zigzag order
+    // STEP 1: Fill A positions using criss-cross zigzag
     for (const [row, col] of aPositions) {
-      if (remainingA.length === 0) continue;
+      if (seatedCount >= maxSeats) break;
 
-      if (!remainingA.find(s => s.examCode === currentACode)) {
-        currentACode = remainingA[0]?.examCode ?? null;
+      const neighborCodes = getNeighborCodes(grid, row, col, rows, totalCols);
+
+      // Try A pool first
+      if (poolA.length > 0) {
+        if (!poolA.find(s => s.examCode === currentACode)) {
+          currentACode = poolA[0]?.examCode || null;
+        }
+
+        if (currentACode && !neighborCodes.has(currentACode)) {
+          const idx = poolA.findIndex(s => s.examCode === currentACode);
+          if (idx >= 0) {
+            grid[row][col] = poolA.splice(idx, 1)[0];
+            seatedCount++;
+            continue;
+          }
+        }
+
+        const altA = pickBest(poolA, neighborCodes);
+        if (altA) {
+          grid[row][col] = altA;
+          seatedCount++;
+          continue;
+        }
       }
 
-      const aIdx = remainingA.findIndex(s => s.examCode === currentACode);
-      if (aIdx >= 0) {
-        grid[row][col] = remainingA.splice(aIdx, 1)[0];
-      } else if (remainingA.length > 0) {
-        currentACode = remainingA[0].examCode;
-        grid[row][col] = remainingA.shift()!;
+      // A queue empty — fill from B pool (CRITICAL FIX: never leave seat empty)
+      if (poolB.length > 0) {
+        const nc = getNeighborCodes(grid, row, col, rows, totalCols);
+        const fromB = pickBest(poolB, nc);
+        if (fromB) {
+          grid[row][col] = fromB;
+          seatedCount++;
+        }
       }
     }
 
-    // Fill B positions with neighbor-aware selection
+    // STEP 2: Fill B positions
     for (const [row, col] of bPositions) {
       if (grid[row][col] !== null) continue;
-      if (remainingB.length === 0) continue;
+      if (seatedCount >= maxSeats) break;
 
-      const neighborCodes = new Set<string>();
+      const neighborCodes = getNeighborCodes(grid, row, col, rows, totalCols);
       if (currentACode) neighborCodes.add(currentACode);
-      const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-      for (const [dr, dc] of directions) {
-        const nr = row + dr;
-        const nc = col + dc;
-        if (nr >= 0 && nr < rows && nc >= 0 && nc < totalCols && grid[nr][nc]) {
-          neighborCodes.add(grid[nr][nc]!.examCode);
+
+      // Try B pool first
+      if (poolB.length > 0) {
+        const student = pickBest(poolB, neighborCodes);
+        if (student) {
+          grid[row][col] = student;
+          seatedCount++;
+          continue;
         }
       }
 
-      const bGroups: Record<string, StudentRecord[]> = {};
-      for (const s of remainingB) {
-        if (!bGroups[s.examCode]) bGroups[s.examCode] = [];
-        bGroups[s.examCode].push(s);
-      }
-
-      const best = Object.entries(bGroups)
-        .filter(([code]) => !neighborCodes.has(code))
-        .sort((a, b) => b[1].length - a[1].length)[0];
-
-      let chosen: StudentRecord | null = null;
-      if (best) {
-        const idx = remainingB.findIndex(s => s.examCode === best[0]);
-        chosen = remainingB.splice(idx, 1)[0];
-      } else {
-        const relaxed = Object.entries(bGroups)
-          .filter(([code]) => code !== currentACode)
-          .sort((a, b) => b[1].length - a[1].length)[0];
-        if (relaxed) {
-          const idx = remainingB.findIndex(s => s.examCode === relaxed[0]);
-          chosen = remainingB.splice(idx, 1)[0];
-        } else {
-          chosen = remainingB.shift() ?? null;
+      // B pool empty — use remaining A students
+      if (poolA.length > 0) {
+        const nc = getNeighborCodes(grid, row, col, rows, totalCols);
+        const fromA = pickBest(poolA, nc);
+        if (fromA) {
+          grid[row][col] = fromA;
+          seatedCount++;
         }
-      }
-
-      if (chosen) {
-        grid[row][col] = chosen;
       }
     }
 
