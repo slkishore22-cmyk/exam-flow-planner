@@ -235,35 +235,140 @@ export function interleaveStudents(students: StudentRecord[]): StudentRecord[] {
   return result;
 }
 
+function buildCrissCrossOrder(rows: number, mainCols: number, subCols: number) {
+  const aPositions: [number, number][] = [];
+  const bPositions: [number, number][] = [];
+
+  for (let mc = 0; mc < mainCols; mc++) {
+    // A positions: zigzag down each main column
+    for (let row = 0; row < rows; row++) {
+      const col = mc * subCols + (row % 2 === 0 ? 0 : subCols - 1);
+      aPositions.push([row, col]);
+    }
+
+    // B positions: S2 middle column all rows top to bottom
+    for (let row = 0; row < rows; row++) {
+      bPositions.push([row, mc * subCols + 1]);
+    }
+
+    // B positions: S1 left column even rows only (rows 1, 3)
+    for (let row = 0; row < rows; row++) {
+      if (row % 2 !== 0) {
+        bPositions.push([row, mc * subCols + 0]);
+      }
+    }
+
+    // B positions: S3 right column odd rows only (rows 0, 2, 4)
+    for (let row = 0; row < rows; row++) {
+      if (row % 2 === 0) {
+        bPositions.push([row, mc * subCols + (subCols - 1)]);
+      }
+    }
+  }
+
+  return { aPositions, bPositions };
+}
+
 export function allocateRooms(
   students: StudentRecord[],
   config: RoomConfig
 ): RoomAllocation[] {
   const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
-  const seatsPerRow = mainColumns * seatsPerColumn;
-  const totalRooms = Math.ceil(students.length / studentsPerRoom);
+  const totalCols = mainColumns * seatsPerColumn;
+  const rows = Math.ceil(studentsPerRoom / totalCols);
+  const { aPositions, bPositions } = buildCrissCrossOrder(rows, mainColumns, seatsPerColumn);
+
+  // Split students into A (largest exam code group) and B (rest)
+  const examGroups: Record<string, StudentRecord[]> = {};
+  for (const s of students) {
+    if (!examGroups[s.examCode]) examGroups[s.examCode] = [];
+    examGroups[s.examCode].push(s);
+  }
+  const sortedCodes = Object.entries(examGroups).sort((a, b) => b[1].length - a[1].length);
+  const remainingA: StudentRecord[] = sortedCodes.length > 0 ? [...sortedCodes[0][1]] : [];
+  const remainingB: StudentRecord[] = sortedCodes.slice(1).flatMap(([, list]) => [...list]);
+
+  let currentACode = remainingA.length > 0 ? remainingA[0].examCode : null;
+
+  const total = students.length;
+  const roomsNeeded = Math.ceil(total / studentsPerRoom);
   const rooms: RoomAllocation[] = [];
 
-  for (let r = 0; r < totalRooms; r++) {
-    const roomStudents = students.slice(r * studentsPerRoom, (r + 1) * studentsPerRoom);
-    const totalRows = Math.ceil(roomStudents.length / seatsPerRow);
-    const grid: (StudentRecord | null)[][] = [];
+  for (let r = 0; r < roomsNeeded; r++) {
+    const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
 
-    for (let row = 0; row < totalRows; row++) {
-      const rowData: (StudentRecord | null)[] = [];
-      for (let col = 0; col < seatsPerRow; col++) {
-        const index = row * seatsPerRow + col;
-        rowData.push(roomStudents[index] || null);
+    // Fill A positions in zigzag order
+    for (const [row, col] of aPositions) {
+      if (remainingA.length === 0) continue;
+
+      if (!remainingA.find(s => s.examCode === currentACode)) {
+        currentACode = remainingA[0]?.examCode ?? null;
       }
-      grid.push(rowData);
+
+      const aIdx = remainingA.findIndex(s => s.examCode === currentACode);
+      if (aIdx >= 0) {
+        grid[row][col] = remainingA.splice(aIdx, 1)[0];
+      } else if (remainingA.length > 0) {
+        currentACode = remainingA[0].examCode;
+        grid[row][col] = remainingA.shift()!;
+      }
     }
+
+    // Fill B positions with neighbor-aware selection
+    for (const [row, col] of bPositions) {
+      if (grid[row][col] !== null) continue;
+      if (remainingB.length === 0) continue;
+
+      const neighborCodes = new Set<string>();
+      if (currentACode) neighborCodes.add(currentACode);
+      const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+      for (const [dr, dc] of directions) {
+        const nr = row + dr;
+        const nc = col + dc;
+        if (nr >= 0 && nr < rows && nc >= 0 && nc < totalCols && grid[nr][nc]) {
+          neighborCodes.add(grid[nr][nc]!.examCode);
+        }
+      }
+
+      const bGroups: Record<string, StudentRecord[]> = {};
+      for (const s of remainingB) {
+        if (!bGroups[s.examCode]) bGroups[s.examCode] = [];
+        bGroups[s.examCode].push(s);
+      }
+
+      const best = Object.entries(bGroups)
+        .filter(([code]) => !neighborCodes.has(code))
+        .sort((a, b) => b[1].length - a[1].length)[0];
+
+      let chosen: StudentRecord | null = null;
+      if (best) {
+        const idx = remainingB.findIndex(s => s.examCode === best[0]);
+        chosen = remainingB.splice(idx, 1)[0];
+      } else {
+        const relaxed = Object.entries(bGroups)
+          .filter(([code]) => code !== currentACode)
+          .sort((a, b) => b[1].length - a[1].length)[0];
+        if (relaxed) {
+          const idx = remainingB.findIndex(s => s.examCode === relaxed[0]);
+          chosen = remainingB.splice(idx, 1)[0];
+        } else {
+          chosen = remainingB.shift() ?? null;
+        }
+      }
+
+      if (chosen) {
+        grid[row][col] = chosen;
+      }
+    }
+
+    const roomStudents = grid.flat().filter((s): s is StudentRecord => s !== null);
 
     rooms.push({
       roomNumber: r + 1,
       students: roomStudents,
       grid,
-      totalRows,
-      seatsPerRow,
+      totalRows: rows,
+      seatsPerRow: totalCols,
     });
   }
 
