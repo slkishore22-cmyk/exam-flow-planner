@@ -307,15 +307,45 @@ export function allocateRooms(
   const rows = Math.ceil(studentsPerRoom / totalCols);
   const { aPositions, bPositions } = buildCrissCrossOrder(rows, mainColumns, seatsPerColumn);
 
-  // Split students into A (largest exam code group) and B (rest)
+  // Group all students by EXAM CODE (not department)
   const examGroups: Record<string, StudentRecord[]> = {};
   for (const s of students) {
     if (!examGroups[s.examCode]) examGroups[s.examCode] = [];
     examGroups[s.examCode].push(s);
   }
-  const sortedCodes = Object.entries(examGroups).sort((a, b) => b[1].length - a[1].length);
-  const poolA: StudentRecord[] = sortedCodes.length > 0 ? [...sortedCodes[0][1]] : [];
-  const poolB: StudentRecord[] = sortedCodes.slice(1).flatMap(([, list]) => [...list]);
+
+  // Sort exam code groups by size descending
+  const sortedCodes = Object.entries(examGroups)
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([code, list]) => ({ code, students: [...list] }));
+
+  // DEFICIT FILL LOOP:
+  // Largest exam code group → A (ODD seats)
+  // Remaining codes → B (EVEN seats), subtracted from A count
+  // When A reaches 0, next largest remaining becomes new A
+  const poolA: StudentRecord[] = [];
+  const poolB: StudentRecord[] = [];
+
+  if (sortedCodes.length > 0) {
+    let aGroup = sortedCodes.shift()!;
+    poolA.push(...aGroup.students);
+    let aRemaining = aGroup.students.length;
+
+    // Subtract B groups from A count until A reaches 0
+    while (sortedCodes.length > 0 && aRemaining > 0) {
+      const bGroup = sortedCodes.shift()!;
+      poolB.push(...bGroup.students);
+      aRemaining -= bGroup.students.length;
+    }
+
+    // If A still has remaining capacity and there are more codes,
+    // they go to B as well
+    // If aRemaining went negative, A is fully consumed
+    // Remaining codes all go to B
+    for (const group of sortedCodes) {
+      poolB.push(...group.students);
+    }
+  }
 
   let currentACode = poolA.length > 0 ? poolA[0].examCode : null;
 
@@ -357,7 +387,7 @@ export function allocateRooms(
         }
       }
 
-      // A queue empty — fill from B pool (CRITICAL FIX: never leave seat empty)
+      // A queue empty — fill from B pool (never leave seat empty)
       if (poolB.length > 0) {
         const nc = getNeighborCodes(grid, row, col, rows, totalCols);
         const fromB = pickBest(poolB, nc);
