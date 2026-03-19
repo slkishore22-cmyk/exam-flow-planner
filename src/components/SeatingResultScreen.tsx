@@ -20,6 +20,37 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     return Array.from(set);
   }, [rooms]);
 
+  // Compute violations per room: cells where same examCode is adjacent
+  const roomViolations = React.useMemo(() => {
+    return rooms.map(room => {
+      const violatedCells = new Set<string>();
+      const totalRows = room.grid.length;
+      const totalCols = room.grid[0]?.length || 0;
+      let count = 0;
+
+      for (let ri = 0; ri < totalRows; ri++) {
+        for (let ci = 0; ci < totalCols; ci++) {
+          const cell = room.grid[ri][ci];
+          if (!cell) continue;
+          const dirs: [number, number][] = [[0, 1], [1, 0]];
+          for (const [dr, dc] of dirs) {
+            const nr = ri + dr;
+            const nc = ci + dc;
+            if (nr < totalRows && nc < totalCols) {
+              const neighbor = room.grid[nr][nc];
+              if (neighbor && neighbor.examCode === cell.examCode) {
+                violatedCells.add(`${ri}-${ci}`);
+                violatedCells.add(`${nr}-${nc}`);
+                count++;
+              }
+            }
+          }
+        }
+      }
+      return { count, violatedCells };
+    });
+  }, [rooms]);
+
   if (!rooms || rooms.length === 0) {
     return <div className="text-center py-20 text-muted-foreground">No rooms to display.</div>;
   }
@@ -28,7 +59,10 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     window.print();
   };
 
-  const renderRoomGrid = (room: RoomAllocation, forPrint = false) => {
+  const totalViolations = roomViolations.reduce((sum, v) => sum + v.count, 0);
+
+  const renderRoomGrid = (room: RoomAllocation, roomIndex: number, forPrint = false) => {
+    const violations = roomViolations[roomIndex];
     return (
       <table className="border-collapse mx-auto" style={{ borderSpacing: 0 }}>
         <thead>
@@ -62,18 +96,19 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 const showSeparator = isLastSubCol && !isLastMainCol;
 
                 const color = student ? getDeptColor(student.department) : null;
+                const isViolation = violations?.violatedCells.has(`${rowIdx}-${colIdx}`);
 
                 const cell = (
                   <td
                     key={`${rowIdx}-${colIdx}`}
-                    className="border-2 border-white text-center align-middle"
+                    className="text-center align-middle"
                     style={{
                       minWidth: 90,
                       height: 65,
-                      backgroundColor: student
-                        ? color!.bg
-                        : 'hsl(var(--muted))',
+                      backgroundColor: student ? color!.bg : 'hsl(var(--muted))',
                       padding: '4px 6px',
+                      border: isViolation ? '3px solid #EF4444' : '2px solid white',
+                      boxShadow: isViolation ? 'inset 0 0 8px rgba(239,68,68,0.4)' : undefined,
                     }}
                   >
                     {student ? (
@@ -112,6 +147,8 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     );
   };
 
+  const activeViolations = roomViolations[activeRoom]?.count || 0;
+
   return (
     <div className="max-w-6xl mx-auto px-4">
       <div className="no-print">
@@ -120,21 +157,50 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         </Button>
       </div>
 
+      {/* Violation summary - red box */}
+      {totalViolations > 0 && (
+        <div className="no-print mb-6 p-4 rounded-2xl border-2" style={{ backgroundColor: '#FEF2F2', borderColor: '#EF4444' }}>
+          <p className="font-bold text-sm" style={{ color: '#DC2626' }}>
+            ⚠ SEATING VIOLATIONS DETECTED
+          </p>
+          <p className="text-sm mt-1" style={{ color: '#991B1B' }}>
+            {totalViolations} adjacent pair{totalViolations !== 1 ? 's' : ''} share the same exam code across all rooms.
+            Cells with violations are highlighted with a red border in the grid below.
+          </p>
+          <div className="flex flex-wrap gap-3 mt-2">
+            {rooms.map((room, i) => {
+              const v = roomViolations[i].count;
+              if (v === 0) return null;
+              return (
+                <span key={i} className="text-xs font-semibold px-2 py-1 rounded" style={{ backgroundColor: '#FEE2E2', color: '#DC2626' }}>
+                  Room {room.roomNumber}: {v} violation{v !== 1 ? 's' : ''}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Room tabs */}
       <div className="no-print flex flex-wrap gap-2 mb-6 justify-center">
-        {rooms.map((room, i) => (
-          <button
-            key={i}
-            onClick={() => setActiveRoom(i)}
-            className={`px-5 py-2 rounded-lg text-sm font-medium transition-all border ${
-              i === activeRoom
-                ? 'bg-foreground text-background border-foreground'
-                : 'bg-background text-foreground border-border hover:border-foreground'
-            }`}
-          >
-            Room {room.roomNumber}
-          </button>
-        ))}
+        {rooms.map((room, i) => {
+          const hasViolation = roomViolations[i].count > 0;
+          return (
+            <button
+              key={i}
+              onClick={() => setActiveRoom(i)}
+              className={`px-5 py-2 rounded-lg text-sm font-medium transition-all border ${
+                i === activeRoom
+                  ? 'bg-foreground text-background border-foreground'
+                  : 'bg-background text-foreground border-border hover:border-foreground'
+              }`}
+              style={hasViolation && i !== activeRoom ? { borderColor: '#EF4444' } : undefined}
+            >
+              Room {room.roomNumber}
+              {hasViolation && <span style={{ color: '#EF4444' }}> •</span>}
+            </button>
+          );
+        })}
       </div>
 
       {/* Color legend */}
@@ -160,9 +226,14 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           <span className="text-sm font-normal text-muted-foreground ml-2">
             ({rooms[activeRoom].students.length} students)
           </span>
+          {activeViolations > 0 && (
+            <span className="text-sm font-semibold ml-2" style={{ color: '#EF4444' }}>
+              — {activeViolations} violation{activeViolations !== 1 ? 's' : ''}
+            </span>
+          )}
         </h3>
         <div className="overflow-x-auto pb-4">
-          {renderRoomGrid(rooms[activeRoom])}
+          {renderRoomGrid(rooms[activeRoom], activeRoom)}
         </div>
       </div>
 
@@ -179,8 +250,11 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           <div key={i} className={i < rooms.length - 1 ? 'print-page-break' : ''}>
             <h2 className="text-xl font-bold text-center mb-4 mt-4">
               Room {room.roomNumber} — {room.students.length} students
+              {roomViolations[i].count > 0 && (
+                <span style={{ color: '#EF4444' }}> — {roomViolations[i].count} violations</span>
+              )}
             </h2>
-            {renderRoomGrid(room, true)}
+            {renderRoomGrid(room, i, true)}
           </div>
         ))}
       </div>
