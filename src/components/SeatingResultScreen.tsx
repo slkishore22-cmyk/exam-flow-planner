@@ -1,14 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { RoomAllocation, RoomConfig, getDeptColor } from '@/lib/seating-utils';
+import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor } from '@/lib/seating-utils';
 
 interface SeatingResultScreenProps {
   rooms: RoomAllocation[];
   config: RoomConfig;
+  patternDecision?: PatternDecision | null;
   onBack: () => void;
 }
 
-const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, onBack }) => {
+const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, patternDecision, onBack }) => {
   const [activeRoom, setActiveRoom] = useState(0);
   const printRef = useRef<HTMLDivElement>(null);
 

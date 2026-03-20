@@ -9,6 +9,7 @@ import {
   StudentRecord,
   RoomConfig,
   RoomAllocation,
+  PatternDecision,
   deduplicateStudents,
   interleaveStudents,
   allocateRooms,
@@ -22,6 +23,7 @@ const Index = () => {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [rooms, setRooms] = useState<RoomAllocation[]>([]);
   const [roomConfig, setRoomConfig] = useState<RoomConfig>({ studentsPerRoom: 45, mainColumns: 3, seatsPerColumn: 3 });
+  const [patternDecision, setPatternDecision] = useState<PatternDecision | null>(null);
 
   const handleUploadComplete = (results: PdfExtractionResult[], files: File[]) => {
     setPdfResults(results);
@@ -39,8 +41,9 @@ const Index = () => {
 
   const handleGenerate = (config: RoomConfig) => {
     setRoomConfig(config);
-    const allocated = allocateRooms([...students], config);
-    setRooms(allocated);
+    const result = allocateRooms([...students], config);
+    setRooms(result.rooms);
+    setPatternDecision(result.patternDecision);
     setCurrentStep(4);
   };
 
@@ -82,6 +85,7 @@ const Index = () => {
           <SeatingResultScreen
             rooms={rooms}
             config={roomConfig}
+            patternDecision={patternDecision}
             onBack={() => setCurrentStep(3)}
           />
         )}
