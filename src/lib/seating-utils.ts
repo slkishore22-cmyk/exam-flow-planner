@@ -392,6 +392,16 @@ export function allocateRooms(
     examGroups[s.examCode].push(s);
   }
 
+  // Sort each exam code group by roll number ascending
+  for (const code of Object.keys(examGroups)) {
+    examGroups[code].sort((a, b) => {
+      const aNum = parseInt(a.rollNumber);
+      const bNum = parseInt(b.rollNumber);
+      if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+      return a.rollNumber.localeCompare(b.rollNumber);
+    });
+  }
+
   const total = students.length;
   const roomsNeeded = Math.ceil(total / studentsPerRoom);
 
