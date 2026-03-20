@@ -28,6 +28,19 @@ export interface RoomAllocation {
   seatsPerRow: number;
 }
 
+export type PatternType = 'CRISS_CROSS' | 'CHECKERBOARD';
+
+export interface PatternDecision {
+  pattern: PatternType;
+  message: string | null;
+  violations: number | 'unavoidable';
+}
+
+export interface AllocationResult {
+  rooms: RoomAllocation[];
+  patternDecision: PatternDecision;
+}
+
 // Maximum color distance palette for unknown departments
 const DEPT_COLOR_PALETTE = [
   { bg: '#D32F2F', text: '#FFFFFF', name: 'Red' },
@@ -66,10 +79,8 @@ const FIXED_DEPT_COLORS: Record<string, { bg: string; text: string }> = {
 const deptColorMap: Record<string, { bg: string; text: string }> = {};
 
 export function getDeptColor(dept: string): { bg: string; text: string } {
-  // Exact match
   if (FIXED_DEPT_COLORS[dept]) return FIXED_DEPT_COLORS[dept];
 
-  // Normalize and fuzzy match
   const clean = dept.toUpperCase().replace(/\s+/g, '').replace(/\.$/, '');
   for (const [key, value] of Object.entries(FIXED_DEPT_COLORS)) {
     const cleanKey = key.toUpperCase().replace(/\s+/g, '').replace(/\.$/, '');
@@ -78,7 +89,6 @@ export function getDeptColor(dept: string): { bg: string; text: string } {
     }
   }
 
-  // Dynamic assignment for completely unknown departments
   if (!deptColorMap[dept]) {
     const usedColors = Object.values(deptColorMap).map(c => c.bg);
     const available = DEPT_COLOR_PALETTE.filter(c => !usedColors.includes(c.bg));
@@ -123,7 +133,6 @@ export async function extractRollNumbersFromPdf(
 
     const pageText = lines.join(' ');
 
-    // Read degree from page header
     const degreeMatch = pageText.match(
       /Degree\s*[:\-]\s*([A-Z][A-Z0-9.\(\)\[\]\/\s]{1,20}?)\s+Subject/i
     );
@@ -131,7 +140,6 @@ export async function extractRollNumbersFromPdf(
       currentDegree = degreeMatch[1].trim().replace(/\s+/g, ' ').toUpperCase();
     }
 
-    // Read Subject exam code from page header (part before first hyphen)
     const subjectMatch = pageText.match(
       /Subject\s*[:\-]\s*([A-Z0-9]{3,8})-/i
     );
@@ -139,7 +147,6 @@ export async function extractRollNumbersFromPdf(
       currentExamCode = subjectMatch[1].trim().toUpperCase();
     }
 
-    // Only count declared on Page No 1 of each section
     const isFirstPageOfSection = /Page\s*No\s*[:\-]?\s*1\b/.test(pageText);
     if (isFirstPageOfSection) {
       const declaredMatch = pageText.match(/No\s+of\s+Candidates\s*[:\-]?\s*(\d+)/i);
@@ -148,7 +155,6 @@ export async function extractRollNumbersFromPdf(
       }
     }
 
-    // Extract roll numbers tagged with degree AND exam code
     for (const line of lines) {
       const rollMatch = line.match(/^(\d{1,3})\s+([A-Z]{0,3}\d{5,9})\s+[A-Z]/);
       if (rollMatch) {
@@ -157,7 +163,6 @@ export async function extractRollNumbersFromPdf(
     }
   }
 
-  // Deduplicate by roll number keeping first occurrence
   const seen = new Set<string>();
   const uniqueRolls: { roll: string; dept: string; examCode: string }[] = [];
   for (const entry of rollNumbers) {
@@ -199,19 +204,16 @@ export function deduplicateStudents(
 }
 
 export function interleaveStudents(students: StudentRecord[]): StudentRecord[] {
-  // Group by department
   const deptMap: Record<string, StudentRecord[]> = {};
   for (const s of students) {
     if (!deptMap[s.department]) deptMap[s.department] = [];
     deptMap[s.department].push(s);
   }
 
-  // Sort departments by count descending
   const queues = Object.entries(deptMap)
     .sort((a, b) => b[1].length - a[1].length)
     .map(([, list]) => [...list]);
 
-  // Round robin with rotating index that persists across iterations
   const result: StudentRecord[] = [];
   let i = 0;
 
@@ -235,6 +237,8 @@ export function interleaveStudents(students: StudentRecord[]): StudentRecord[] {
   return result;
 }
 
+// ── Pattern builders ──
+
 function buildCrissCrossOrder(rows: number, mainCols: number, subCols: number) {
   const aPositions: [number, number][] = [];
   const bPositions: [number, number][] = [];
@@ -257,6 +261,79 @@ function buildCrissCrossOrder(rows: number, mainCols: number, subCols: number) {
 
   return { aPositions, bPositions };
 }
+
+function buildCheckerboardOrder(rows: number, mainCols: number, subCols: number) {
+  const totalCols = mainCols * subCols;
+  const aPositions: [number, number][] = [];
+  const bPositions: [number, number][] = [];
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < totalCols; col++) {
+      if ((row + col) % 2 === 0) {
+        aPositions.push([row, col]);
+      } else {
+        bPositions.push([row, col]);
+      }
+    }
+  }
+
+  return { aPositions, bPositions };
+}
+
+// ── Pattern decision engine ──
+
+export function decidePattern(
+  examGroups: Record<string, StudentRecord[]>,
+  roomsNeeded: number,
+  mainCols: number,
+  subCols: number,
+  rows: number
+): PatternDecision {
+  const totalSeatsPerRoom = mainCols * subCols * rows;
+
+  // Criss Cross A seats per room: mainCols * rows (one A seat per row per main column)
+  const crissCrossAPerRoom = mainCols * Math.ceil(rows / 2) + mainCols * Math.floor(rows / 2);
+  // Checkerboard A seats per room: ceil(totalSeats / 2)
+  const checkerboardAPerRoom = Math.ceil(totalSeatsPerRoom / 2);
+
+  const crissCrossATotal = roomsNeeded * crissCrossAPerRoom;
+  const checkerboardATotal = roomsNeeded * checkerboardAPerRoom;
+
+  const groupSizes = Object.entries(examGroups)
+    .map(([code, students]) => ({ code, count: students.length }))
+    .sort((a, b) => b.count - a.count);
+
+  if (groupSizes.length === 0) {
+    return { pattern: 'CRISS_CROSS', message: null, violations: 0 };
+  }
+
+  const largest = groupSizes[0];
+  const largestCount = largest.count;
+  const largestCode = largest.code;
+
+  if (largestCount <= crissCrossATotal) {
+    return { pattern: 'CRISS_CROSS', message: null, violations: 0 };
+  }
+
+  if (largestCount <= checkerboardATotal) {
+    return {
+      pattern: 'CHECKERBOARD',
+      message: `Pattern auto-switched to Checkerboard because ${largestCode} has ${largestCount.toLocaleString()} students which exceeds Criss Cross capacity of ${crissCrossATotal.toLocaleString()} A seats. Checkerboard provides ${checkerboardATotal.toLocaleString()} A seats. Zero violations guaranteed.`,
+      violations: 0,
+    };
+  }
+
+  const minRoomsNeeded = Math.ceil(largestCount / checkerboardAPerRoom);
+  const extraRoomsNeeded = minRoomsNeeded - roomsNeeded;
+
+  return {
+    pattern: 'CHECKERBOARD',
+    message: `Warning: ${largestCode} has ${largestCount.toLocaleString()} students. Even Checkerboard cannot fully separate them with ${roomsNeeded} rooms. Need ${minRoomsNeeded} rooms (${extraRoomsNeeded} more) for zero violations. Using Checkerboard to minimize violations.`,
+    violations: 'unavoidable',
+  };
+}
+
+// ── Allocation helpers ──
 
 function getNeighborCodes(
   grid: (StudentRecord | null)[][],
@@ -298,50 +375,53 @@ function pickBest(pool: StudentRecord[], excludeCodes: Set<string>): StudentReco
   return null;
 }
 
+// ── Main allocation function ──
+
 export function allocateRooms(
   students: StudentRecord[],
   config: RoomConfig
-): RoomAllocation[] {
+): AllocationResult {
   const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
   const totalCols = mainColumns * seatsPerColumn;
   const rows = Math.ceil(studentsPerRoom / totalCols);
-  const { aPositions, bPositions } = buildCrissCrossOrder(rows, mainColumns, seatsPerColumn);
 
-  // Group all students by EXAM CODE (not department)
+  // Group all students by EXAM CODE
   const examGroups: Record<string, StudentRecord[]> = {};
   for (const s of students) {
     if (!examGroups[s.examCode]) examGroups[s.examCode] = [];
     examGroups[s.examCode].push(s);
   }
 
-  // Sort exam code groups by size descending
-  const sortedCodes = Object.entries(examGroups)
-    .sort((a, b) => b[1].length - a[1].length)
-    .map(([code, list]) => ({ code, students: [...list] }));
+  const total = students.length;
+  const roomsNeeded = Math.ceil(total / studentsPerRoom);
 
-  // DEFICIT FILL LOOP:
-  // Largest exam code group → A (ODD seats)
-  // Remaining codes → B (EVEN seats), subtracted from A count
-  // When A reaches 0, next largest remaining becomes new A
+  // STEP 1: Decide pattern automatically
+  const patternDecision = decidePattern(examGroups, roomsNeeded, mainColumns, seatsPerColumn, rows);
+
+  // STEP 2: Pick fill order based on decided pattern
+  const { aPositions, bPositions } = patternDecision.pattern === 'CHECKERBOARD'
+    ? buildCheckerboardOrder(rows, mainColumns, seatsPerColumn)
+    : buildCrissCrossOrder(rows, mainColumns, seatsPerColumn);
+
+  // STEP 3: Deficit fill loop — group by exam code
+  const sortedCodes = Object.entries(examGroups)
+    .map(([code, list]) => ({ code, students: [...list] }))
+    .sort((a, b) => b.students.length - a.students.length);
+
   const poolA: StudentRecord[] = [];
   const poolB: StudentRecord[] = [];
 
   if (sortedCodes.length > 0) {
-    let aGroup = sortedCodes.shift()!;
+    const aGroup = sortedCodes.shift()!;
     poolA.push(...aGroup.students);
     let aRemaining = aGroup.students.length;
 
-    // Subtract B groups from A count until A reaches 0
     while (sortedCodes.length > 0 && aRemaining > 0) {
       const bGroup = sortedCodes.shift()!;
       poolB.push(...bGroup.students);
       aRemaining -= bGroup.students.length;
     }
 
-    // If A still has remaining capacity and there are more codes,
-    // they go to B as well
-    // If aRemaining went negative, A is fully consumed
-    // Remaining codes all go to B
     for (const group of sortedCodes) {
       poolB.push(...group.students);
     }
@@ -349,8 +429,7 @@ export function allocateRooms(
 
   let currentACode = poolA.length > 0 ? poolA[0].examCode : null;
 
-  const total = students.length;
-  const roomsNeeded = Math.ceil(total / studentsPerRoom);
+  // STEP 4: Generate rooms with decided pattern
   const rooms: RoomAllocation[] = [];
 
   for (let r = 0; r < roomsNeeded; r++) {
@@ -358,13 +437,12 @@ export function allocateRooms(
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     let seatedCount = 0;
 
-    // STEP 1: Fill A positions using criss-cross zigzag
+    // Fill A positions
     for (const [row, col] of aPositions) {
       if (seatedCount >= maxSeats) break;
 
       const neighborCodes = getNeighborCodes(grid, row, col, rows, totalCols);
 
-      // Try A pool first
       if (poolA.length > 0) {
         if (!poolA.find(s => s.examCode === currentACode)) {
           currentACode = poolA[0]?.examCode || null;
@@ -398,7 +476,7 @@ export function allocateRooms(
       }
     }
 
-    // STEP 2: Fill B positions
+    // Fill B positions
     for (const [row, col] of bPositions) {
       if (grid[row][col] !== null) continue;
       if (seatedCount >= maxSeats) break;
@@ -406,7 +484,6 @@ export function allocateRooms(
       const neighborCodes = getNeighborCodes(grid, row, col, rows, totalCols);
       if (currentACode) neighborCodes.add(currentACode);
 
-      // Try B pool first
       if (poolB.length > 0) {
         const student = pickBest(poolB, neighborCodes);
         if (student) {
@@ -416,7 +493,6 @@ export function allocateRooms(
         }
       }
 
-      // B pool empty — use remaining A students
       if (poolA.length > 0) {
         const nc = getNeighborCodes(grid, row, col, rows, totalCols);
         const fromA = pickBest(poolA, nc);
@@ -438,5 +514,5 @@ export function allocateRooms(
     });
   }
 
-  return rooms;
+  return { rooms, patternDecision };
 }

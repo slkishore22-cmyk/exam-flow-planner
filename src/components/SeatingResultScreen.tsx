@@ -1,14 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { RoomAllocation, RoomConfig, getDeptColor } from '@/lib/seating-utils';
+import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor } from '@/lib/seating-utils';
 
 interface SeatingResultScreenProps {
   rooms: RoomAllocation[];
   config: RoomConfig;
+  patternDecision?: PatternDecision | null;
   onBack: () => void;
 }
 
-const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, onBack }) => {
+const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, patternDecision, onBack }) => {
   const [activeRoom, setActiveRoom] = useState(0);
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -156,6 +157,24 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           ← Back
         </Button>
       </div>
+
+      {/* Pattern decision banner */}
+      {patternDecision?.message && (
+        <div
+          className="no-print mb-6 p-4 rounded-2xl border-2"
+          style={{
+            backgroundColor: patternDecision.violations === 'unavoidable' ? '#FFFBEB' : '#EFF6FF',
+            borderColor: patternDecision.violations === 'unavoidable' ? '#F59E0B' : '#3B82F6',
+          }}
+        >
+          <p className="font-bold text-sm" style={{ color: patternDecision.violations === 'unavoidable' ? '#D97706' : '#2563EB' }}>
+            {patternDecision.violations === 'unavoidable' ? '⚠️ Additional Rooms Required' : 'ℹ️ Pattern Auto-Switched to Checkerboard'}
+          </p>
+          <p className="text-sm mt-1" style={{ color: patternDecision.violations === 'unavoidable' ? '#92400E' : '#1E40AF' }}>
+            {patternDecision.message}
+          </p>
+        </div>
+      )}
 
       {/* Violation summary - red box */}
       {totalViolations > 0 && (
