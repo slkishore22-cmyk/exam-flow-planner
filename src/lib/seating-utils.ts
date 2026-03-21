@@ -241,25 +241,37 @@ export function interleaveStudents(students: StudentRecord[]): StudentRecord[] {
 
 function buildCrissCrossOrder(rows: number, mainCols: number, subCols: number) {
   const aPositions: [number, number][] = [];
-  const bPositions: [number, number][] = [];
+  const bS1S3Positions: [number, number][] = []; // S1 and S3 fill FIRST
+  const bS2Positions: [number, number][] = [];   // S2 fills LAST
 
   for (let mc = 0; mc < mainCols; mc++) {
+    // A positions: zigzag down S1 and S3
     for (let row = 0; row < rows; row++) {
       const col = mc * subCols + (row % 2 === 0 ? 0 : subCols - 1);
       aPositions.push([row, col]);
     }
+
+    // B S1 even rows (rows 1, 3) — fill FIRST
     for (let row = 0; row < rows; row++) {
-      bPositions.push([row, mc * subCols + 1]);
+      if (row % 2 !== 0) {
+        bS1S3Positions.push([row, mc * subCols + 0]);
+      }
     }
+
+    // B S3 odd rows (rows 0, 2, 4) — fill FIRST
     for (let row = 0; row < rows; row++) {
-      if (row % 2 !== 0) bPositions.push([row, mc * subCols + 0]);
+      if (row % 2 === 0) {
+        bS1S3Positions.push([row, mc * subCols + (subCols - 1)]);
+      }
     }
+
+    // B S2 all rows — fill LAST
     for (let row = 0; row < rows; row++) {
-      if (row % 2 === 0) bPositions.push([row, mc * subCols + (subCols - 1)]);
+      bS2Positions.push([row, mc * subCols + 1]);
     }
   }
 
-  return { aPositions, bPositions };
+  return { aPositions, bS1S3Positions, bS2Positions };
 }
 
 function buildCheckerboardOrder(rows: number, mainCols: number, subCols: number) {
