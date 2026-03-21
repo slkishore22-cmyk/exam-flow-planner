@@ -421,27 +421,54 @@ export function allocateRooms(
   const patternDecision = decidePattern(examGroups, roomsNeeded, mainColumns, seatsPerColumn, rows);
 
   // STEP 2: Deficit fill loop — group by exam code
-  const sortedCodes = Object.entries(examGroups)
-    .map(([code, list]) => ({ code, students: [...list] }))
-    .sort((a, b) => b.students.length - a.students.length);
+  // STRICT RULE: same exam code must NEVER appear in both A and B queues
+  const remaining: Record<string, StudentRecord[]> = {};
+  for (const [code, list] of Object.entries(examGroups)) {
+    remaining[code] = [...list];
+  }
 
   const poolA: StudentRecord[] = [];
   const poolB: StudentRecord[] = [];
 
-  if (sortedCodes.length > 0) {
-    const aGroup = sortedCodes.shift()!;
-    poolA.push(...aGroup.students);
-    let aRemaining = aGroup.students.length;
+  while (Object.values(remaining).some(q => q.length > 0)) {
+    // Pick largest remaining group as Group A
+    const available = Object.entries(remaining)
+      .filter(([, v]) => v.length > 0)
+      .sort((a, b) => b[1].length - a[1].length);
 
-    while (sortedCodes.length > 0 && aRemaining > 0) {
-      const bGroup = sortedCodes.shift()!;
-      poolB.push(...bGroup.students);
-      aRemaining -= bGroup.students.length;
-    }
+    if (!available.length) break;
 
-    for (const group of sortedCodes) {
-      poolB.push(...group.students);
+    const [aCode] = available[0];
+    const aStudents = remaining[aCode];
+
+    // All A students go to A queue
+    poolA.push(...aStudents);
+    remaining[aCode] = [];
+
+    // Fill B queue — STRICT: never use same exam code as current A
+    let bNeeded = aStudents.length;
+
+    const eligibleB = Object.entries(remaining)
+      .filter(([code, q]) => code !== aCode && q.length > 0)
+      .sort((a, b) => b[1].length - a[1].length);
+
+    for (const [bCode] of eligibleB) {
+      if (bNeeded <= 0) break;
+      const take = Math.min(remaining[bCode].length, bNeeded);
+      const taken = remaining[bCode].splice(0, take);
+      poolB.push(...taken);
+      bNeeded -= take;
     }
+  }
+
+  // Verification
+  const aExamCodes = new Set(poolA.map(s => s.examCode));
+  const bExamCodes = new Set(poolB.map(s => s.examCode));
+  const overlap = [...aExamCodes].filter(c => bExamCodes.has(c));
+  if (overlap.length > 0) {
+    console.error('BUG: Same exam code in both A and B queues:', overlap);
+  } else {
+    console.log('Deficit fill verified: no exam code overlap between A and B queues ✅');
   }
 
   let currentACode = poolA.length > 0 ? poolA[0].examCode : null;
