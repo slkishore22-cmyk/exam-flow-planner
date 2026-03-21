@@ -241,25 +241,37 @@ export function interleaveStudents(students: StudentRecord[]): StudentRecord[] {
 
 function buildCrissCrossOrder(rows: number, mainCols: number, subCols: number) {
   const aPositions: [number, number][] = [];
-  const bPositions: [number, number][] = [];
+  const bS1S3Positions: [number, number][] = []; // S1 and S3 fill FIRST
+  const bS2Positions: [number, number][] = [];   // S2 fills LAST
 
   for (let mc = 0; mc < mainCols; mc++) {
+    // A positions: zigzag down S1 and S3
     for (let row = 0; row < rows; row++) {
       const col = mc * subCols + (row % 2 === 0 ? 0 : subCols - 1);
       aPositions.push([row, col]);
     }
+
+    // B S1 even rows (rows 1, 3) — fill FIRST
     for (let row = 0; row < rows; row++) {
-      bPositions.push([row, mc * subCols + 1]);
+      if (row % 2 !== 0) {
+        bS1S3Positions.push([row, mc * subCols + 0]);
+      }
     }
+
+    // B S3 odd rows (rows 0, 2, 4) — fill FIRST
     for (let row = 0; row < rows; row++) {
-      if (row % 2 !== 0) bPositions.push([row, mc * subCols + 0]);
+      if (row % 2 === 0) {
+        bS1S3Positions.push([row, mc * subCols + (subCols - 1)]);
+      }
     }
+
+    // B S2 all rows — fill LAST
     for (let row = 0; row < rows; row++) {
-      if (row % 2 === 0) bPositions.push([row, mc * subCols + (subCols - 1)]);
+      bS2Positions.push([row, mc * subCols + 1]);
     }
   }
 
-  return { aPositions, bPositions };
+  return { aPositions, bS1S3Positions, bS2Positions };
 }
 
 function buildCheckerboardOrder(rows: number, mainCols: number, subCols: number) {
@@ -408,12 +420,7 @@ export function allocateRooms(
   // STEP 1: Decide pattern automatically
   const patternDecision = decidePattern(examGroups, roomsNeeded, mainColumns, seatsPerColumn, rows);
 
-  // STEP 2: Pick fill order based on decided pattern
-  const { aPositions, bPositions } = patternDecision.pattern === 'CHECKERBOARD'
-    ? buildCheckerboardOrder(rows, mainColumns, seatsPerColumn)
-    : buildCrissCrossOrder(rows, mainColumns, seatsPerColumn);
-
-  // STEP 3: Deficit fill loop — group by exam code
+  // STEP 2: Deficit fill loop — group by exam code
   const sortedCodes = Object.entries(examGroups)
     .map(([code, list]) => ({ code, students: [...list] }))
     .sort((a, b) => b.students.length - a.students.length);
@@ -438,8 +445,9 @@ export function allocateRooms(
   }
 
   let currentACode = poolA.length > 0 ? poolA[0].examCode : null;
+  let lastS2Code: string | null = null;
 
-  // STEP 4: Generate rooms with decided pattern
+  // STEP 3: Generate rooms with decided pattern
   const rooms: RoomAllocation[] = [];
 
   for (let r = 0; r < roomsNeeded; r++) {
@@ -447,17 +455,46 @@ export function allocateRooms(
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     let seatedCount = 0;
 
-    // Fill A positions
+    // Get fill order based on pattern
+    let aPositions: [number, number][];
+    let bS1S3Positions: [number, number][];
+    let bS2Positions: [number, number][];
+
+    if (patternDecision.pattern === 'CHECKERBOARD') {
+      aPositions = [];
+      bS1S3Positions = [];
+      bS2Positions = [];
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < totalCols; col++) {
+          if ((row + col) % 2 === 0) aPositions.push([row, col]);
+          else bS1S3Positions.push([row, col]);
+        }
+      }
+    } else {
+      const order = buildCrissCrossOrder(rows, mainColumns, seatsPerColumn);
+      aPositions = order.aPositions;
+      bS1S3Positions = order.bS1S3Positions;
+      bS2Positions = order.bS2Positions;
+    }
+
+    // Update current A code to largest remaining
+    if (poolA.length > 0) {
+      const countByCode: Record<string, number> = {};
+      for (const s of poolA) {
+        countByCode[s.examCode] = (countByCode[s.examCode] || 0) + 1;
+      }
+      currentACode = Object.keys(countByCode)
+        .sort((a, b) => countByCode[b] - countByCode[a])[0];
+    } else {
+      currentACode = null;
+    }
+
+    // FILL STEP 1: A positions (zigzag)
     for (const [row, col] of aPositions) {
       if (seatedCount >= maxSeats) break;
-
       const neighborCodes = getNeighborCodes(grid, row, col, rows, totalCols);
 
       if (poolA.length > 0) {
-        if (!poolA.find(s => s.examCode === currentACode)) {
-          currentACode = poolA[0]?.examCode || null;
-        }
-
         if (currentACode && !neighborCodes.has(currentACode)) {
           const idx = poolA.findIndex(s => s.examCode === currentACode);
           if (idx >= 0) {
@@ -466,7 +503,6 @@ export function allocateRooms(
             continue;
           }
         }
-
         const altA = pickBest(poolA, neighborCodes);
         if (altA) {
           grid[row][col] = altA;
@@ -475,7 +511,7 @@ export function allocateRooms(
         }
       }
 
-      // A queue empty — fill from B pool (never leave seat empty)
+      // A pool empty — fill from B pool, never leave empty
       if (poolB.length > 0) {
         const nc = getNeighborCodes(grid, row, col, rows, totalCols);
         const fromB = pickBest(poolB, nc);
@@ -486,8 +522,8 @@ export function allocateRooms(
       }
     }
 
-    // Fill B positions
-    for (const [row, col] of bPositions) {
+    // FILL STEP 2: S1 and S3 B positions FIRST
+    for (const [row, col] of bS1S3Positions) {
       if (grid[row][col] !== null) continue;
       if (seatedCount >= maxSeats) break;
 
@@ -502,7 +538,45 @@ export function allocateRooms(
           continue;
         }
       }
+      if (poolA.length > 0) {
+        const nc = getNeighborCodes(grid, row, col, rows, totalCols);
+        const fromA = pickBest(poolA, nc);
+        if (fromA) {
+          grid[row][col] = fromA;
+          seatedCount++;
+        }
+      }
+    }
 
+    // FILL STEP 3: S2 positions LAST — rotate code between rooms
+    for (const [row, col] of bS2Positions) {
+      if (grid[row][col] !== null) continue;
+      if (seatedCount >= maxSeats) break;
+
+      const neighborCodes = getNeighborCodes(grid, row, col, rows, totalCols);
+
+      // Exclude current A code AND last room's S2 code to force rotation
+      const excludeForS2 = new Set(neighborCodes);
+      if (currentACode) excludeForS2.add(currentACode);
+      if (lastS2Code) excludeForS2.add(lastS2Code);
+
+      if (poolB.length > 0) {
+        let student = pickBest(poolB, excludeForS2);
+        if (!student) {
+          // Relax rotation constraint — just avoid neighbors + A code
+          const relaxed = new Set(neighborCodes);
+          if (currentACode) relaxed.add(currentACode);
+          student = pickBest(poolB, relaxed);
+        }
+        if (student) {
+          if (row === 0 && col === 1) {
+            lastS2Code = student.examCode;
+          }
+          grid[row][col] = student;
+          seatedCount++;
+          continue;
+        }
+      }
       if (poolA.length > 0) {
         const nc = getNeighborCodes(grid, row, col, rows, totalCols);
         const fromA = pickBest(poolA, nc);
