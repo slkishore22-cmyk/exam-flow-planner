@@ -417,6 +417,9 @@ export function allocateRooms(
   const total = students.length;
   const roomsNeeded = Math.ceil(total / studentsPerRoom);
 
+  // STEP 1: Decide pattern automatically
+  const patternDecision = decidePattern(examGroups, roomsNeeded, mainColumns, seatsPerColumn, rows);
+
   // STEP 2: Deficit fill loop — group by exam code
   const sortedCodes = Object.entries(examGroups)
     .map(([code, list]) => ({ code, students: [...list] }))
