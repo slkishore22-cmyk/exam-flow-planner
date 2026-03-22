@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor } from '@/lib/seating-utils';
 
@@ -11,24 +11,66 @@ interface SeatingResultScreenProps {
 
 const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, patternDecision, onBack }) => {
   const [activeRoom, setActiveRoom] = useState(0);
+  const [visibleDepts, setVisibleDepts] = useState<Set<string>>(new Set());
   const printRef = useRef<HTMLDivElement>(null);
 
+  // Reset visible depts when switching rooms
+  useEffect(() => {
+    setVisibleDepts(new Set());
+  }, [activeRoom]);
+
+  const toggleDept = (deptName: string) => {
+    setVisibleDepts(prev => {
+      const next = new Set(prev);
+      if (next.has(deptName)) next.delete(deptName);
+      else next.add(deptName);
+      return next;
+    });
+  };
+
+  const fillAll = () => {
+    const allDepts = new Set(rooms[activeRoom].students.map(s => s.department));
+    setVisibleDepts(allDepts);
+  };
+
+  const clearAll = () => setVisibleDepts(new Set());
+
   // Collect unique departments across all rooms for legend
-  const allDepts = React.useMemo(() => {
+  const allDepts = useMemo(() => {
     if (!rooms || rooms.length === 0) return [];
     const set = new Set<string>();
     rooms.forEach(r => r.students.forEach(s => set.add(s.department)));
     return Array.from(set);
   }, [rooms]);
 
-  // Compute violations per room: cells where same examCode is adjacent
-  const roomViolations = React.useMemo(() => {
+  // Departments in current room with counts
+  const deptsInRoom = useMemo(() => {
+    if (!rooms || rooms.length === 0) return [];
+    const room = rooms[activeRoom];
+    const seen = new Map<string, number>();
+    for (const s of room.students) {
+      seen.set(s.department, (seen.get(s.department) || 0) + 1);
+    }
+    return Array.from(seen.entries()).map(([name, count]) => ({
+      name,
+      color: getDeptColor(name),
+      count,
+      isVisible: visibleDepts.has(name),
+    }));
+  }, [rooms, activeRoom, visibleDepts]);
+
+  // Progress
+  const totalStudents = rooms[activeRoom]?.students.length || 0;
+  const visibleStudents = rooms[activeRoom]?.students.filter(s => visibleDepts.has(s.department)).length || 0;
+  const progress = totalStudents > 0 ? Math.round((visibleStudents / totalStudents) * 100) : 0;
+
+  // Compute violations per room
+  const roomViolations = useMemo(() => {
     return rooms.map(room => {
       const violatedCells = new Set<string>();
       const totalRows = room.grid.length;
       const totalCols = room.grid[0]?.length || 0;
       let count = 0;
-
       for (let ri = 0; ri < totalRows; ri++) {
         for (let ci = 0; ci < totalCols; ci++) {
           const cell = room.grid[ri][ci];
@@ -56,14 +98,20 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     return <div className="text-center py-20 text-muted-foreground">No rooms to display.</div>;
   }
 
-  const handlePrint = () => {
-    window.print();
-  };
-
+  const handlePrint = () => window.print();
   const totalViolations = roomViolations.reduce((sum, v) => sum + v.count, 0);
+
+  // Determine seat type label based on position
+  const getSeatTypeLabel = (rowIdx: number, colIdx: number): string => {
+    const sc = colIdx % config.seatsPerColumn;
+    if (sc === 0 || sc === config.seatsPerColumn - 1) return 'A';
+    return 'B';
+  };
 
   const renderRoomGrid = (room: RoomAllocation, roomIndex: number, forPrint = false) => {
     const violations = roomViolations[roomIndex];
+    const showReveal = !forPrint;
+
     return (
       <table className="border-collapse mx-auto" style={{ borderSpacing: 0 }}>
         <thead>
@@ -96,37 +144,61 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 const isLastMainCol = mc === config.mainColumns - 1;
                 const showSeparator = isLastSubCol && !isLastMainCol;
 
-                const color = student ? getDeptColor(student.department) : null;
+                const isOccupied = student !== null;
+                const isVisible = forPrint ? true : (isOccupied && visibleDepts.has(student!.department));
                 const isViolation = violations?.violatedCells.has(`${rowIdx}-${colIdx}`);
+                const seatLabel = getSeatTypeLabel(rowIdx, colIdx);
+
+                let cellContent: React.ReactNode;
+                let cellBg: string;
+                let cellBorder: string;
+
+                if (!isOccupied) {
+                  // Truly empty seat
+                  cellBg = 'hsl(var(--muted))';
+                  cellBorder = '2px solid white';
+                  cellContent = <span className="text-muted-foreground text-xs">—</span>;
+                } else if (!isVisible && showReveal) {
+                  // Occupied but hidden — show placeholder with seat label
+                  cellBg = 'hsl(var(--muted))';
+                  cellBorder = '1px solid hsl(var(--border))';
+                  cellContent = (
+                    <span className="text-muted-foreground text-xs font-medium">{seatLabel}</span>
+                  );
+                } else {
+                  // Visible — show full student info
+                  const color = getDeptColor(student!.department);
+                  cellBg = color.bg;
+                  cellBorder = isViolation ? '3px solid #EF4444' : '2px solid white';
+                  cellContent = (
+                    <div className="flex flex-col items-center justify-center gap-0">
+                      <span style={{ fontSize: 9, color: color.text, fontWeight: 500 }}>
+                        {student!.department}
+                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#FFD700' }}>
+                        {student!.examCode}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: color.text, fontFamily: 'monospace' }}>
+                        {student!.rollNumber}
+                      </span>
+                    </div>
+                  );
+                }
 
                 const cell = (
                   <td
                     key={`${rowIdx}-${colIdx}`}
-                    className="text-center align-middle"
+                    className="text-center align-middle seat-cell"
                     style={{
                       minWidth: 90,
                       height: 65,
-                      backgroundColor: student ? color!.bg : 'hsl(var(--muted))',
+                      backgroundColor: cellBg,
                       padding: '4px 6px',
-                      border: isViolation ? '3px solid #EF4444' : '2px solid white',
-                      boxShadow: isViolation ? 'inset 0 0 8px rgba(239,68,68,0.4)' : undefined,
+                      border: cellBorder,
+                      boxShadow: isViolation && isVisible ? 'inset 0 0 8px rgba(239,68,68,0.4)' : undefined,
                     }}
                   >
-                    {student ? (
-                      <div className="flex flex-col items-center justify-center gap-0">
-                        <span style={{ fontSize: 9, color: color!.text, fontWeight: 500 }}>
-                          {student.department}
-                        </span>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#FFD700' }}>
-                          {student.examCode}
-                        </span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: color!.text, fontFamily: 'monospace' }}>
-                          {student.rollNumber}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
+                    {cellContent}
                   </td>
                 );
 
@@ -138,7 +210,6 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                     </React.Fragment>
                   );
                 }
-
                 return cell;
               })}
             </tr>
@@ -176,12 +247,10 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         </div>
       )}
 
-      {/* Violation summary - red box */}
+      {/* Violation summary */}
       {totalViolations > 0 && (
         <div className="no-print mb-6 p-4 rounded-2xl border-2" style={{ backgroundColor: '#FEF2F2', borderColor: '#EF4444' }}>
-          <p className="font-bold text-sm" style={{ color: '#DC2626' }}>
-            ⚠ SEATING VIOLATIONS DETECTED
-          </p>
+          <p className="font-bold text-sm" style={{ color: '#DC2626' }}>⚠ SEATING VIOLATIONS DETECTED</p>
           <p className="text-sm mt-1" style={{ color: '#991B1B' }}>
             {totalViolations} adjacent pair{totalViolations !== 1 ? 's' : ''} share the same exam code across all rooms.
             Cells with violations are highlighted with a red border in the grid below.
@@ -222,20 +291,51 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         })}
       </div>
 
-      {/* Color legend */}
-      <div className="no-print mb-6 p-4 bg-secondary rounded-2xl">
-        <p className="text-sm font-bold mb-3 tracking-wide uppercase">Color Legend</p>
-        <div className="flex flex-wrap gap-4">
-          {allDepts.map(dept => {
-            const color = getDeptColor(dept);
-            return (
-              <div key={dept} className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded inline-block" style={{ backgroundColor: color.bg }} />
-                <span className="text-sm font-semibold">{dept}</span>
-              </div>
-            );
-          })}
+      {/* Department reveal bar */}
+      <div className="no-print mb-3 p-3 bg-secondary rounded-2xl">
+        <div className="flex flex-wrap gap-2">
+          {deptsInRoom.map(dept => (
+            <button
+              key={dept.name}
+              onClick={() => toggleDept(dept.name)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs transition-all cursor-pointer"
+              style={{
+                border: dept.isVisible ? `2px solid ${dept.color.bg}` : '1px solid hsl(var(--border))',
+                background: dept.isVisible ? `${dept.color.bg}18` : 'hsl(var(--background))',
+                fontWeight: dept.isVisible ? 500 : 400,
+                color: 'hsl(var(--foreground))',
+              }}
+            >
+              <span
+                className="inline-block rounded-full flex-shrink-0"
+                style={{ width: 10, height: 10, background: dept.color.bg }}
+              />
+              {dept.name}
+              <span style={{ fontSize: 11, color: dept.isVisible ? dept.color.bg : 'hsl(var(--muted-foreground))' }}>
+                {dept.count}
+              </span>
+            </button>
+          ))}
         </div>
+      </div>
+
+      {/* Fill All / Clear / Progress */}
+      <div className="no-print flex items-center gap-3 mb-6">
+        <Button variant="outline" size="sm" onClick={fillAll} className="text-xs rounded-md">
+          Fill All
+        </Button>
+        <Button variant="outline" size="sm" onClick={clearAll} className="text-xs rounded-md border-destructive/30 text-destructive hover:bg-destructive/10">
+          Clear
+        </Button>
+        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{ width: `${progress}%`, background: '#2E7D32' }}
+          />
+        </div>
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {visibleStudents} / {totalStudents} — {progress}%
+        </span>
       </div>
 
       {/* Active room grid */}
