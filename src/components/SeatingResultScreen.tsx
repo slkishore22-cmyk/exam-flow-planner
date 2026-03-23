@@ -133,7 +133,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 const showSeparator = isLastSubCol && !isLastMainCol;
 
                 const isOccupied = student !== null;
-                const isVisible = forPrint ? true : (isOccupied && visibleDepts.has(student!.department));
+                const isVisible = forPrint ? true : (isOccupied && visibleExamCodes.has(student!.examCode));
                 const isViolation = violations?.violatedCells.has(`${rowIdx}-${colIdx}`);
                 const seatLabel = getSeatTypeLabel(rowIdx, colIdx);
 
