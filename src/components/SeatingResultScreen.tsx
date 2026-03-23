@@ -279,28 +279,28 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         })}
       </div>
 
-      {/* Department reveal bar */}
+      {/* Exam code reveal bar — universal across all rooms */}
       <div className="no-print mb-3 p-3 bg-secondary rounded-2xl">
         <div className="flex flex-wrap gap-2">
-          {deptsInRoom.map(dept => (
+          {examCodesGlobal.map(ec => (
             <button
-              key={dept.name}
-              onClick={() => toggleDept(dept.name)}
+              key={ec.code}
+              onClick={() => toggleExamCode(ec.code)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs transition-all cursor-pointer"
               style={{
-                border: dept.isVisible ? `2px solid ${dept.color.bg}` : '1px solid hsl(var(--border))',
-                background: dept.isVisible ? `${dept.color.bg}18` : 'hsl(var(--background))',
-                fontWeight: dept.isVisible ? 500 : 400,
+                border: ec.isVisible ? '2px solid hsl(var(--primary))' : '1px solid hsl(var(--border))',
+                background: ec.isVisible ? 'hsl(var(--primary) / 0.1)' : 'hsl(var(--background))',
+                fontWeight: ec.isVisible ? 600 : 400,
                 color: 'hsl(var(--foreground))',
               }}
             >
               <span
                 className="inline-block rounded-full flex-shrink-0"
-                style={{ width: 10, height: 10, background: dept.color.bg }}
+                style={{ width: 10, height: 10, background: ec.isVisible ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }}
               />
-              {dept.name}
-              <span style={{ fontSize: 11, color: dept.isVisible ? dept.color.bg : 'hsl(var(--muted-foreground))' }}>
-                {dept.count}
+              {ec.code}
+              <span style={{ fontSize: 11, color: ec.isVisible ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }}>
+                {ec.count}
               </span>
             </button>
           ))}
