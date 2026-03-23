@@ -11,58 +11,46 @@ interface SeatingResultScreenProps {
 
 const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, patternDecision, onBack }) => {
   const [activeRoom, setActiveRoom] = useState(0);
-  const [visibleDepts, setVisibleDepts] = useState<Set<string>>(new Set());
+  const [visibleExamCodes, setVisibleExamCodes] = useState<Set<string>>(new Set());
   const printRef = useRef<HTMLDivElement>(null);
 
-  // Reset visible depts when switching rooms
-  useEffect(() => {
-    setVisibleDepts(new Set());
-  }, [activeRoom]);
-
-  const toggleDept = (deptName: string) => {
-    setVisibleDepts(prev => {
+  const toggleExamCode = (code: string) => {
+    setVisibleExamCodes(prev => {
       const next = new Set(prev);
-      if (next.has(deptName)) next.delete(deptName);
-      else next.add(deptName);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
       return next;
     });
   };
 
   const fillAll = () => {
-    const allDepts = new Set(rooms[activeRoom].students.map(s => s.department));
-    setVisibleDepts(allDepts);
+    const allCodes = new Set<string>();
+    rooms.forEach(r => r.students.forEach(s => allCodes.add(s.examCode)));
+    setVisibleExamCodes(allCodes);
   };
 
-  const clearAll = () => setVisibleDepts(new Set());
+  const clearAll = () => setVisibleExamCodes(new Set());
 
-  // Collect unique departments across all rooms for legend
-  const allDepts = useMemo(() => {
+  // Collect unique exam codes across ALL rooms with total counts
+  const examCodesGlobal = useMemo(() => {
     if (!rooms || rooms.length === 0) return [];
-    const set = new Set<string>();
-    rooms.forEach(r => r.students.forEach(s => set.add(s.department)));
-    return Array.from(set);
-  }, [rooms]);
-
-  // Departments in current room with counts
-  const deptsInRoom = useMemo(() => {
-    if (!rooms || rooms.length === 0) return [];
-    const room = rooms[activeRoom];
-    const seen = new Map<string, number>();
-    for (const s of room.students) {
-      seen.set(s.department, (seen.get(s.department) || 0) + 1);
-    }
-    return Array.from(seen.entries()).map(([name, count]) => ({
-      name,
-      color: getDeptColor(name),
-      count,
-      isVisible: visibleDepts.has(name),
+    const countMap = new Map<string, number>();
+    rooms.forEach(r => r.students.forEach(s => {
+      countMap.set(s.examCode, (countMap.get(s.examCode) || 0) + 1);
     }));
-  }, [rooms, activeRoom, visibleDepts]);
+    return Array.from(countMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([code, count]) => ({
+        code,
+        count,
+        isVisible: visibleExamCodes.has(code),
+      }));
+  }, [rooms, visibleExamCodes]);
 
-  // Progress
-  const totalStudents = rooms[activeRoom]?.students.length || 0;
-  const visibleStudents = rooms[activeRoom]?.students.filter(s => visibleDepts.has(s.department)).length || 0;
-  const progress = totalStudents > 0 ? Math.round((visibleStudents / totalStudents) * 100) : 0;
+  // Progress: total across ALL rooms
+  const totalStudentsAll = rooms.reduce((sum, r) => sum + r.students.length, 0);
+  const visibleStudentsAll = rooms.reduce((sum, r) => sum + r.students.filter(s => visibleExamCodes.has(s.examCode)).length, 0);
+  const progress = totalStudentsAll > 0 ? Math.round((visibleStudentsAll / totalStudentsAll) * 100) : 0;
 
   // Compute violations per room
   const roomViolations = useMemo(() => {
@@ -145,7 +133,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 const showSeparator = isLastSubCol && !isLastMainCol;
 
                 const isOccupied = student !== null;
-                const isVisible = forPrint ? true : (isOccupied && visibleDepts.has(student!.department));
+                const isVisible = forPrint ? true : (isOccupied && visibleExamCodes.has(student!.examCode));
                 const isViolation = violations?.violatedCells.has(`${rowIdx}-${colIdx}`);
                 const seatLabel = getSeatTypeLabel(rowIdx, colIdx);
 
@@ -291,28 +279,28 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         })}
       </div>
 
-      {/* Department reveal bar */}
+      {/* Exam code reveal bar — universal across all rooms */}
       <div className="no-print mb-3 p-3 bg-secondary rounded-2xl">
         <div className="flex flex-wrap gap-2">
-          {deptsInRoom.map(dept => (
+          {examCodesGlobal.map(ec => (
             <button
-              key={dept.name}
-              onClick={() => toggleDept(dept.name)}
+              key={ec.code}
+              onClick={() => toggleExamCode(ec.code)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs transition-all cursor-pointer"
               style={{
-                border: dept.isVisible ? `2px solid ${dept.color.bg}` : '1px solid hsl(var(--border))',
-                background: dept.isVisible ? `${dept.color.bg}18` : 'hsl(var(--background))',
-                fontWeight: dept.isVisible ? 500 : 400,
+                border: ec.isVisible ? '2px solid hsl(var(--primary))' : '1px solid hsl(var(--border))',
+                background: ec.isVisible ? 'hsl(var(--primary) / 0.1)' : 'hsl(var(--background))',
+                fontWeight: ec.isVisible ? 600 : 400,
                 color: 'hsl(var(--foreground))',
               }}
             >
               <span
                 className="inline-block rounded-full flex-shrink-0"
-                style={{ width: 10, height: 10, background: dept.color.bg }}
+                style={{ width: 10, height: 10, background: ec.isVisible ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }}
               />
-              {dept.name}
-              <span style={{ fontSize: 11, color: dept.isVisible ? dept.color.bg : 'hsl(var(--muted-foreground))' }}>
-                {dept.count}
+              {ec.code}
+              <span style={{ fontSize: 11, color: ec.isVisible ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }}>
+                {ec.count}
               </span>
             </button>
           ))}
@@ -334,7 +322,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           />
         </div>
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {visibleStudents} / {totalStudents} — {progress}%
+          {visibleStudentsAll} / {totalStudentsAll} — {progress}%
         </span>
       </div>
 
