@@ -322,7 +322,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           />
         </div>
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {visibleStudents} / {totalStudents} — {progress}%
+          {visibleStudentsAll} / {totalStudentsAll} — {progress}%
         </span>
       </div>
 
