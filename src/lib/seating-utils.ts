@@ -573,8 +573,6 @@ export function allocateRooms(
 
   return { rooms, patternDecision };
 }
-
-function buildCrissCrossOrder(rows: number, mainCols: number, subCols: number) {
   const aPositions: [number, number][] = [];
   const bS1S3Positions: [number, number][] = []; // S1 and S3 fill FIRST
   const bS2Positions: [number, number][] = [];   // S2 fills LAST
