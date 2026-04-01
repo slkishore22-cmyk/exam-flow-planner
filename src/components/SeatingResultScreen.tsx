@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor } from '@/lib/seating-utils';
 
@@ -13,6 +13,87 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const [activeRoom, setActiveRoom] = useState(0);
   const [visibleExamCodes, setVisibleExamCodes] = useState<Set<string>>(new Set());
   const printRef = useRef<HTMLDivElement>(null);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number | null>(null);
+
+  const goNext = useCallback(() => {
+    setActiveRoom(prev => Math.min(prev + 1, rooms.length - 1));
+  }, [rooms.length]);
+
+  const goPrev = useCallback(() => {
+    setActiveRoom(prev => Math.max(prev - 1, 0));
+  }, []);
+
+  const goFirst = useCallback(() => setActiveRoom(0), []);
+  const goLast = useCallback(() => setActiveRoom(rooms.length - 1), [rooms.length]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't capture if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+          e.preventDefault();
+          goNext();
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          e.preventDefault();
+          goPrev();
+          break;
+        case 'Home':
+          e.preventDefault();
+          goFirst();
+          break;
+        case 'End':
+          e.preventDefault();
+          goLast();
+          break;
+        case 'f':
+        case 'F':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            const allCodes = new Set<string>();
+            rooms.forEach(r => r.students.forEach(s => allCodes.add(s.examCode)));
+            setVisibleExamCodes(allCodes);
+          }
+          break;
+        case 'c':
+        case 'C':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            setVisibleExamCodes(new Set());
+          }
+          break;
+        case 'p':
+        case 'P':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            window.print();
+          }
+          break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [goNext, goPrev, goFirst, goLast, rooms]);
+
+  // Touch swipe navigation
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) goNext();
+      else goPrev();
+    }
+    touchStartX.current = null;
+  };
 
   const toggleExamCode = (code: string) => {
     setVisibleExamCodes(prev => {
