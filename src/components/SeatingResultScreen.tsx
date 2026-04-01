@@ -407,21 +407,51 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         </span>
       </div>
 
-      {/* Active room grid */}
-      <div className="no-print">
-        <h3 className="text-xl font-bold text-center mb-4">
-          Room {rooms[activeRoom].roomNumber}
-          <span className="text-sm font-normal text-muted-foreground ml-2">
-            ({rooms[activeRoom].students.length} students)
-          </span>
-          {activeViolations > 0 && (
-            <span className="text-sm font-semibold ml-2" style={{ color: '#EF4444' }}>
-              — {activeViolations} violation{activeViolations !== 1 ? 's' : ''}
+      {/* Active room grid with swipe + nav buttons */}
+      <div className="no-print" ref={gridContainerRef} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+        <div className="flex items-center justify-between mb-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goPrev}
+            disabled={activeRoom === 0}
+            className="text-xs rounded-md px-3"
+          >
+            ← Prev
+          </Button>
+          <h3 className="text-xl font-bold text-center">
+            Room {rooms[activeRoom].roomNumber}
+            <span className="text-sm font-normal text-muted-foreground ml-2">
+              ({rooms[activeRoom].students.length} students)
             </span>
-          )}
-        </h3>
+            {activeViolations > 0 && (
+              <span className="text-sm font-semibold ml-2" style={{ color: '#EF4444' }}>
+                — {activeViolations} violation{activeViolations !== 1 ? 's' : ''}
+              </span>
+            )}
+          </h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goNext}
+            disabled={activeRoom === rooms.length - 1}
+            className="text-xs rounded-md px-3"
+          >
+            Next →
+          </Button>
+        </div>
         <div className="overflow-x-auto pb-4">
           {renderRoomGrid(rooms[activeRoom], activeRoom)}
+        </div>
+
+        {/* Keyboard shortcuts hint */}
+        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-3 text-[10px] text-muted-foreground">
+          <span>← → Navigate rooms</span>
+          <span>Home / End  First / Last</span>
+          <span>F Fill all</span>
+          <span>C Clear</span>
+          <span>P Print</span>
+          <span>Swipe left/right on touch</span>
         </div>
       </div>
 
