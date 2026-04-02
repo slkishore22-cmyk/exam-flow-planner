@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor } from '@/lib/seating-utils';
+import { RoomAllocation, RoomConfig, PatternDecision, getExamCodeColor } from '@/lib/seating-utils';
 
 interface SeatingResultScreenProps {
   rooms: RoomAllocation[];
@@ -236,7 +236,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                   );
                 } else {
                   // Visible — show full student info
-                  const color = getDeptColor(student!.department);
+                  const color = getExamCodeColor(student!.examCode);
                   cellBg = color.bg;
                   cellBorder = isViolation ? '3px solid #EF4444' : '2px solid white';
                   cellContent = (
@@ -520,7 +520,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                             {Array.from({ length: config.seatsPerColumn }).map((_, sc) => {
                               const colIdx = mc * config.seatsPerColumn + sc;
                               const student = row[colIdx];
-                              const color = student ? getDeptColor(student.department) : null;
+                              const color = student ? getExamCodeColor(student.examCode) : null;
                               return (
                                 <td key={sc} style={{ border: '1px solid #000', padding: '3px 4px', textAlign: 'center', height: 28 }}>
                                   {student ? (
@@ -556,7 +556,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                   </thead>
                   <tbody>
                     {summaryItems.map((item, idx) => {
-                      const color = getDeptColor(item.dept);
+                      const color = getExamCodeColor(item.code);
                       return (
                         <tr key={idx}>
                           <td style={{ border: '1px solid #000', padding: '2px 8px', fontSize: 10, color: color.bg, fontWeight: 600 }}>{item.dept}</td>

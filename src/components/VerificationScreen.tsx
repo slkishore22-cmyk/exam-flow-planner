@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { StudentRecord, PdfExtractionResult, getDeptColor } from '@/lib/seating-utils';
+import { StudentRecord, PdfExtractionResult, getDeptColor, getExamCodeColor } from '@/lib/seating-utils';
 
 interface VerificationScreenProps {
   students: StudentRecord[];
