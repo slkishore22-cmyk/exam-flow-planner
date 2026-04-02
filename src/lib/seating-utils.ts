@@ -45,31 +45,31 @@ const DEPT_COLOR_PALETTE = [
   { bg: '#D32F2F', text: '#FFFFFF', name: 'Red' },
   { bg: '#1565C0', text: '#FFFFFF', name: 'Blue' },
   { bg: '#2E7D32', text: '#FFFFFF', name: 'Green' },
-  { bg: '#F57F17', text: '#000000', name: 'Amber' },
-  { bg: '#6A1B9A', text: '#FFFFFF', name: 'Purple' },
-  { bg: '#00838F', text: '#FFFFFF', name: 'Cyan' },
-  { bg: '#BF360C', text: '#FFFFFF', name: 'Deep Orange' },
-  { bg: '#283593', text: '#FFFFFF', name: 'Indigo' },
-  { bg: '#558B2F', text: '#FFFFFF', name: 'Olive Green' },
-  { bg: '#E91E63', text: '#FFFFFF', name: 'Pink' },
-  { bg: '#004D40', text: '#FFFFFF', name: 'Teal' },
-  { bg: '#E65100', text: '#FFFFFF', name: 'Burnt Orange' },
-  { bg: '#880E4F', text: '#FFFFFF', name: 'Dark Pink' },
-  { bg: '#1A237E', text: '#FFFFFF', name: 'Deep Navy' },
-  { bg: '#33691E', text: '#FFFFFF', name: 'Dark Lime' },
+  { bg: '#FF6F00', text: '#000000', name: 'Orange' },
+  { bg: '#7B1FA2', text: '#FFFFFF', name: 'Purple' },
+  { bg: '#00897B', text: '#FFFFFF', name: 'Teal' },
+  { bg: '#C2185B', text: '#FFFFFF', name: 'Magenta' },
+  { bg: '#0277BD', text: '#FFFFFF', name: 'Sky Blue' },
+  { bg: '#827717', text: '#FFFFFF', name: 'Olive' },
+  { bg: '#4527A0', text: '#FFFFFF', name: 'Deep Purple' },
+  { bg: '#EF6C00', text: '#000000', name: 'Tangerine' },
+  { bg: '#00695C', text: '#FFFFFF', name: 'Dark Teal' },
+  { bg: '#AD1457', text: '#FFFFFF', name: 'Rose' },
+  { bg: '#1565C0', text: '#FFFFFF', name: 'Cobalt' },
+  { bg: '#558B2F', text: '#FFFFFF', name: 'Lime' },
 ];
 
 const FIXED_DEPT_COLORS: Record<string, { bg: string; text: string }> = {
-  'BBA':          { bg: '#D32F2F', text: '#FFFFFF' },
-  'B.COM.':       { bg: '#1565C0', text: '#FFFFFF' },
-  'B.SC.':        { bg: '#2E7D32', text: '#FFFFFF' },
-  'B.A':          { bg: '#F57F17', text: '#000000' },
-  'MA':           { bg: '#6A1B9A', text: '#FFFFFF' },
-  'B.COM.(CS)':   { bg: '#00838F', text: '#FFFFFF' },
-  'BSC[VC]':      { bg: '#BF360C', text: '#FFFFFF' },
-  'M.COM.':       { bg: '#880E4F', text: '#FFFFFF' },
-  'M.SC.':        { bg: '#004D40', text: '#FFFFFF' },
-  'B.COM.(CA)':   { bg: '#283593', text: '#FFFFFF' },
+  'BBA':          { bg: '#D32F2F', text: '#FFFFFF' },   // Bold Red
+  'B.COM.':       { bg: '#1565C0', text: '#FFFFFF' },   // Blue
+  'B.SC.':        { bg: '#2E7D32', text: '#FFFFFF' },   // Green
+  'B.A':          { bg: '#FF6F00', text: '#000000' },   // Vivid Orange (was dull amber)
+  'MA':           { bg: '#7B1FA2', text: '#FFFFFF' },   // Vivid Purple
+  'B.COM.(CS)':   { bg: '#00897B', text: '#FFFFFF' },   // Teal
+  'BSC[VC]':      { bg: '#C2185B', text: '#FFFFFF' },   // Magenta (was deep orange — too close to red)
+  'M.COM.':       { bg: '#0277BD', text: '#FFFFFF' },   // Sky Blue (was dark pink — too close to red)
+  'M.SC.':        { bg: '#827717', text: '#FFFFFF' },   // Olive (was dark teal — too close to teal)
+  'B.COM.(CA)':   { bg: '#4527A0', text: '#FFFFFF' },   // Deep Purple (was indigo — too close to blue)
   'UNKNOWN':      { bg: '#424242', text: '#FFFFFF' },
 };
 
