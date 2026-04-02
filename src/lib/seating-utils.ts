@@ -96,6 +96,20 @@ export function getDeptColor(dept: string): { bg: string; text: string } {
   return deptColorMap[dept];
 }
 
+// Exam-code-based color assignment — each unique exam code gets a distinct color
+const examCodeColorMap: Record<string, { bg: string; text: string }> = {};
+
+export function getExamCodeColor(examCode: string): { bg: string; text: string } {
+  if (!examCodeColorMap[examCode]) {
+    const usedColors = Object.values(examCodeColorMap).map(c => c.bg);
+    const available = DEPT_COLOR_PALETTE.filter(c => !usedColors.includes(c.bg));
+    examCodeColorMap[examCode] = available.length > 0
+      ? available[0]
+      : DEPT_COLOR_PALETTE[Object.keys(examCodeColorMap).length % DEPT_COLOR_PALETTE.length];
+  }
+  return examCodeColorMap[examCode];
+}
+
 export async function extractRollNumbersFromPdf(
   file: File,
   onProgress: (page: number, total: number, fileName: string) => void
