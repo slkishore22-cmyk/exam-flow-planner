@@ -462,19 +462,119 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         </Button>
       </div>
 
-      {/* Print-only: all rooms */}
-      <div ref={printRef} className="hidden print:block">
-        {rooms.map((room, i) => (
-          <div key={i} className={i < rooms.length - 1 ? 'print-page-break' : ''}>
-            <h2 className="text-xl font-bold text-center mb-4 mt-4">
-              Room {room.roomNumber} — {room.students.length} students
-              {roomViolations[i].count > 0 && (
-                <span style={{ color: '#EF4444' }}> — {roomViolations[i].count} violations</span>
-              )}
-            </h2>
-            {renderRoomGrid(room, i, true)}
-          </div>
-        ))}
+      {/* Print-only: all rooms — landscape, roll numbers only */}
+      <div ref={printRef} className="hidden print:block print-container">
+        {rooms.map((room, roomIdx) => {
+          // Collect department/exam code summary for this room
+          const summaryMap = new Map<string, { dept: string; code: string; count: number }>();
+          room.students.forEach(s => {
+            const key = `${s.department}|${s.examCode}`;
+            if (!summaryMap.has(key)) summaryMap.set(key, { dept: s.department, code: s.examCode, count: 0 });
+            summaryMap.get(key)!.count++;
+          });
+          const summaryItems = Array.from(summaryMap.values()).sort((a, b) => b.count - a.count);
+
+          return (
+            <div key={roomIdx} className={roomIdx < rooms.length - 1 ? 'print-page-break' : ''}>
+              {/* Header with blank fields for invigilator */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '2px solid #000', paddingBottom: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>
+                  Room No: <span style={{ display: 'inline-block', width: 120, borderBottom: '1px solid #000' }}>&nbsp;</span>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>
+                  Date: <span style={{ display: 'inline-block', width: 140, borderBottom: '1px solid #000' }}>&nbsp;</span>
+                </div>
+              </div>
+
+              {/* Seating grid — seat numbers + roll numbers only */}
+              <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
+                <thead>
+                  <tr>
+                    {Array.from({ length: config.mainColumns }).map((_, mc) => (
+                      <React.Fragment key={mc}>
+                        <th style={{ border: '1px solid #000', padding: '3px 2px', fontSize: 10, fontWeight: 700, textAlign: 'center', width: 28, backgroundColor: '#f0f0f0' }}>
+                          S.No
+                        </th>
+                        {Array.from({ length: config.seatsPerColumn }).map((_, sc) => (
+                          <th key={sc} style={{ border: '1px solid #000', padding: '3px 4px', fontSize: 10, fontWeight: 700, textAlign: 'center', backgroundColor: '#f0f0f0' }}>
+                            S{mc * config.seatsPerColumn + sc + 1}
+                          </th>
+                        ))}
+                        {mc < config.mainColumns - 1 && (
+                          <th style={{ width: 8, border: 'none' }} />
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {room.grid.map((row, rowIdx) => (
+                    <tr key={rowIdx}>
+                      {Array.from({ length: config.mainColumns }).map((_, mc) => {
+                        const seatNumber = mc * room.grid.length + rowIdx + 1;
+                        return (
+                          <React.Fragment key={mc}>
+                            <td style={{ border: '1px solid #000', padding: '2px', fontSize: 10, fontWeight: 700, textAlign: 'center', backgroundColor: '#f0f0f0' }}>
+                              {seatNumber}
+                            </td>
+                            {Array.from({ length: config.seatsPerColumn }).map((_, sc) => {
+                              const colIdx = mc * config.seatsPerColumn + sc;
+                              const student = row[colIdx];
+                              const color = student ? getDeptColor(student.department) : null;
+                              return (
+                                <td key={sc} style={{ border: '1px solid #000', padding: '3px 4px', textAlign: 'center', height: 28 }}>
+                                  {student ? (
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: color!.bg, fontFamily: 'monospace' }}>
+                                      {student.rollNumber}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: '#ccc', fontSize: 10 }}>—</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            {mc < config.mainColumns - 1 && (
+                              <td style={{ width: 8, border: 'none' }} />
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Summary footer: department, exam code, count */}
+              <div style={{ marginTop: 10, borderTop: '2px solid #000', paddingTop: 6 }}>
+                <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ border: '1px solid #000', padding: '3px 8px', fontSize: 10, textAlign: 'left', backgroundColor: '#f0f0f0' }}>Department</th>
+                      <th style={{ border: '1px solid #000', padding: '3px 8px', fontSize: 10, textAlign: 'left', backgroundColor: '#f0f0f0' }}>Exam Code</th>
+                      <th style={{ border: '1px solid #000', padding: '3px 8px', fontSize: 10, textAlign: 'center', backgroundColor: '#f0f0f0' }}>Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summaryItems.map((item, idx) => {
+                      const color = getDeptColor(item.dept);
+                      return (
+                        <tr key={idx}>
+                          <td style={{ border: '1px solid #000', padding: '2px 8px', fontSize: 10, color: color.bg, fontWeight: 600 }}>{item.dept}</td>
+                          <td style={{ border: '1px solid #000', padding: '2px 8px', fontSize: 10, color: color.bg, fontWeight: 600 }}>{item.code}</td>
+                          <td style={{ border: '1px solid #000', padding: '2px 8px', fontSize: 10, textAlign: 'center', fontWeight: 700 }}>{item.count}</td>
+                        </tr>
+                      );
+                    })}
+                    <tr>
+                      <td colSpan={2} style={{ border: '1px solid #000', padding: '2px 8px', fontSize: 10, fontWeight: 700, textAlign: 'right' }}>Total</td>
+                      <td style={{ border: '1px solid #000', padding: '2px 8px', fontSize: 10, textAlign: 'center', fontWeight: 700 }}>{room.students.length}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
