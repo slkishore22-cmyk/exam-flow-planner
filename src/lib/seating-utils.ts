@@ -240,16 +240,31 @@ function buildThreePassOrder(rows: number, mainCols: number, subCols: number) {
   const middlePositions: [number, number][] = [];
 
   for (let mc = 0; mc < mainCols; mc++) {
+    const s1 = mc * subCols + 0;
+    const s2 = mc * subCols + 1;
+    const s3 = mc * subCols + (subCols - 1);
+
+    // ODD positions = S1 odd rows + S3 even rows (zigzag)
     for (let row = 0; row < rows; row++) {
-      oddPositions.push([row, mc * subCols + 0]);
-    }
-    for (let row = 0; row < rows; row++) {
-      evenPositions.push([row, mc * subCols + (subCols - 1)]);
-    }
-    for (let sc = 1; sc < subCols - 1; sc++) {
-      for (let row = 0; row < rows; row++) {
-        middlePositions.push([row, mc * subCols + sc]);
+      if (row % 2 === 0) {
+        oddPositions.push([row, s1]);  // S1 rows 0,2,4
+      } else {
+        oddPositions.push([row, s3]);  // S3 rows 1,3
       }
+    }
+
+    // EVEN positions = S3 odd rows + S1 even rows (mirror zigzag)
+    for (let row = 0; row < rows; row++) {
+      if (row % 2 === 0) {
+        evenPositions.push([row, s3]);  // S3 rows 0,2,4
+      } else {
+        evenPositions.push([row, s1]);  // S1 rows 1,3
+      }
+    }
+
+    // MIDDLE positions = S2 all rows
+    for (let row = 0; row < rows; row++) {
+      middlePositions.push([row, s2]);
     }
   }
 
