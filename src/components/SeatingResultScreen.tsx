@@ -440,6 +440,9 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           </Button>
           <h3 className="text-xl font-bold text-center">
             Room {rooms[activeRoom].roomNumber}
+            {rooms[activeRoom].isGeneralExam && (
+              <span className="text-sm font-medium text-muted-foreground ml-2">(General Exam)</span>
+            )}
             <span className="text-sm font-normal text-muted-foreground ml-2">
               ({rooms[activeRoom].students.length} students)
             </span>
