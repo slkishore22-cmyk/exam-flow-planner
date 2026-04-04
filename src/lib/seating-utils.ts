@@ -418,6 +418,58 @@ function pickBest(pool: StudentRecord[], excludeCodes: Set<string>): StudentReco
   return null;
 }
 
+export const GENERAL_EXAM_THRESHOLD = 1000;
+export const GENERAL_EXAM_CONFIG: RoomConfig = {
+  studentsPerRoom: 30,
+  mainColumns: 3,
+  seatsPerColumn: 2,
+};
+
+function allocateGeneralExamRooms(
+  students: StudentRecord[],
+  config: RoomConfig,
+  startRoomNumber: number
+): RoomAllocation[] {
+  const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
+  const totalCols = mainColumns * seatsPerColumn;
+  const rows = Math.ceil(studentsPerRoom / totalCols);
+  const roomsNeeded = Math.ceil(students.length / studentsPerRoom);
+  const rooms: RoomAllocation[] = [];
+
+  // Sort by roll number
+  const sorted = [...students].sort((a, b) => {
+    const aNum = parseInt(a.rollNumber);
+    const bNum = parseInt(b.rollNumber);
+    if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+    return a.rollNumber.localeCompare(b.rollNumber);
+  });
+
+  for (let r = 0; r < roomsNeeded; r++) {
+    const start = r * studentsPerRoom;
+    const roomStudents = sorted.slice(start, start + studentsPerRoom);
+    const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
+
+    let idx = 0;
+    for (let row = 0; row < rows && idx < roomStudents.length; row++) {
+      for (let col = 0; col < totalCols && idx < roomStudents.length; col++) {
+        grid[row][col] = roomStudents[idx++];
+      }
+    }
+
+    rooms.push({
+      roomNumber: startRoomNumber + r,
+      students: roomStudents,
+      grid,
+      totalRows: rows,
+      seatsPerRow: totalCols,
+      isGeneralExam: true,
+      roomConfig: config,
+    });
+  }
+
+  return rooms;
+}
+
 export function allocateRooms(
   students: StudentRecord[],
   config: RoomConfig
