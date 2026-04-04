@@ -563,9 +563,10 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                           })}
                         </tr>
                   ))}
-                </tbody>
-              </table>
-
+                    </tbody>
+                  </table>
+                );
+              })()}
               {/* Summary footer: department, exam code, count */}
               <div style={{ marginTop: 10, borderTop: '2px solid #000', paddingTop: 6 }}>
                 <table style={{ borderCollapse: 'collapse', width: '100%' }}>
