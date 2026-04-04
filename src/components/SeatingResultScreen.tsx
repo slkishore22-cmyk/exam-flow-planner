@@ -188,23 +188,24 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const renderRoomGrid = (room: RoomAllocation, roomIndex: number, forPrint = false) => {
     const violations = roomViolations[roomIndex];
     const showReveal = !forPrint;
+    const rc = getRoomConfig(room);
 
     return (
       <table className="border-collapse mx-auto" style={{ borderSpacing: 0 }}>
         <thead>
           <tr>
-            {Array.from({ length: config.mainColumns }).map((_, mc) => (
+            {Array.from({ length: rc.mainColumns }).map((_, mc) => (
               <React.Fragment key={mc}>
-                {Array.from({ length: config.seatsPerColumn }).map((_, sc) => (
+                {Array.from({ length: rc.seatsPerColumn }).map((_, sc) => (
                   <th
                     key={`${mc}-${sc}`}
                     className="border border-border px-2 py-2 text-xs font-semibold bg-secondary text-secondary-foreground"
                     style={{ minWidth: 90 }}
                   >
-                    {mc * config.seatsPerColumn + sc + 1}
+                    {mc * rc.seatsPerColumn + sc + 1}
                   </th>
                 ))}
-                {mc < config.mainColumns - 1 && (
+                {mc < rc.mainColumns - 1 && (
                   <th className="w-4 border-none" style={{ minWidth: 16 }} />
                 )}
               </React.Fragment>
@@ -215,16 +216,16 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           {room.grid.map((row, rowIdx) => (
             <tr key={rowIdx}>
               {row.map((student, colIdx) => {
-                const mc = Math.floor(colIdx / config.seatsPerColumn);
-                const sc = colIdx % config.seatsPerColumn;
-                const isLastSubCol = sc === config.seatsPerColumn - 1;
-                const isLastMainCol = mc === config.mainColumns - 1;
+                const mc = Math.floor(colIdx / rc.seatsPerColumn);
+                const sc = colIdx % rc.seatsPerColumn;
+                const isLastSubCol = sc === rc.seatsPerColumn - 1;
+                const isLastMainCol = mc === rc.mainColumns - 1;
                 const showSeparator = isLastSubCol && !isLastMainCol;
 
                 const isOccupied = student !== null;
                 const isVisible = forPrint ? true : (isOccupied && visibleExamCodes.has(student!.examCode));
                 const isViolation = violations?.violatedCells.has(`${rowIdx}-${colIdx}`);
-                const seatLabel = getSeatTypeLabel(rowIdx, colIdx);
+                const seatLabel = getSeatTypeLabel(rowIdx, colIdx, rc);
 
                 let cellContent: React.ReactNode;
                 let cellBg: string;
