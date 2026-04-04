@@ -177,11 +177,13 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const totalViolations = roomViolations.reduce((sum, v) => sum + v.count, 0);
 
   // Determine seat type label based on position
-  const getSeatTypeLabel = (rowIdx: number, colIdx: number): string => {
-    const sc = colIdx % config.seatsPerColumn;
-    if (sc === 0 || sc === config.seatsPerColumn - 1) return 'A';
+  const getSeatTypeLabel = (rowIdx: number, colIdx: number, roomCfg: RoomConfig): string => {
+    const sc = colIdx % roomCfg.seatsPerColumn;
+    if (sc === 0 || sc === roomCfg.seatsPerColumn - 1) return 'A';
     return 'B';
   };
+
+  const getRoomConfig = (room: RoomAllocation): RoomConfig => room.roomConfig || config;
 
   const renderRoomGrid = (room: RoomAllocation, roomIndex: number, forPrint = false) => {
     const violations = roomViolations[roomIndex];
