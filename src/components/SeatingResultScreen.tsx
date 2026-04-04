@@ -7,6 +7,7 @@ interface SeatingResultScreenProps {
   config: RoomConfig;
   patternDecision?: PatternDecision | null;
   onBack: () => void;
+  onAddRoom?: () => void;
 }
 
 const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, patternDecision, onBack }) => {
