@@ -372,6 +372,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
               style={hasViolation && i !== activeRoom ? { borderColor: '#EF4444' } : undefined}
             >
               Room {room.roomNumber}
+              {room.isGeneralExam && <span className="text-xs ml-1 opacity-70">(GE)</span>}
               {hasViolation && <span style={{ color: '#EF4444' }}> •</span>}
             </button>
           );
