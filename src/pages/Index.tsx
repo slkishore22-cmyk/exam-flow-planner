@@ -47,6 +47,18 @@ const Index = () => {
     setCurrentStep(4);
   };
 
+  const handleAddRoom = () => {
+    // Reduce students per room so one more room is created, then regenerate
+    const currentRooms = Math.ceil(students.length / roomConfig.studentsPerRoom);
+    const newRoomCount = currentRooms + 1;
+    const newStudentsPerRoom = Math.ceil(students.length / newRoomCount);
+    const newConfig = { ...roomConfig, studentsPerRoom: newStudentsPerRoom };
+    setRoomConfig(newConfig);
+    const result = allocateRooms([...students], newConfig);
+    setRooms(result.rooms);
+    setPatternDecision(result.patternDecision);
+  };
+
   const handleStepClick = (step: number) => {
     if (step < currentStep) {
       setCurrentStep(step);
@@ -87,6 +99,7 @@ const Index = () => {
             config={roomConfig}
             patternDecision={patternDecision}
             onBack={() => setCurrentStep(3)}
+            onAddRoom={handleAddRoom}
           />
         )}
       </div>
