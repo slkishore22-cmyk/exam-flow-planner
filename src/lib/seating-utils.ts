@@ -26,6 +26,8 @@ export interface RoomAllocation {
   grid: (StudentRecord | null)[][];
   totalRows: number;
   seatsPerRow: number;
+  isGeneralExam?: boolean;
+  roomConfig?: RoomConfig; // per-room config (may differ for general exam rooms)
 }
 
 export type PatternType = 'CRISS_CROSS' | 'CHECKERBOARD';
