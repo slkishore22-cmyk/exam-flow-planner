@@ -314,6 +314,15 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           <p className="text-sm mt-1" style={{ color: patternDecision.violations === 'unavoidable' ? '#92400E' : '#1E40AF' }}>
             {patternDecision.message}
           </p>
+          {patternDecision.violations === 'unavoidable' && onAddRoom && (
+            <Button
+              onClick={onAddRoom}
+              className="mt-3 rounded-xl px-6 h-10 text-sm font-bold"
+              style={{ backgroundColor: '#D97706', color: '#FFFFFF' }}
+            >
+              + Add Additional Room & Regenerate
+            </Button>
+          )}
         </div>
       )}
 
