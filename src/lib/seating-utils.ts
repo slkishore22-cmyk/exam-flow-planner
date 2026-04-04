@@ -474,12 +474,44 @@ export function allocateRooms(
   students: StudentRecord[],
   config: RoomConfig
 ): AllocationResult {
+  // Split: exam codes with >GENERAL_EXAM_THRESHOLD students → general exam rooms
+  const examCounts: Record<string, StudentRecord[]> = {};
+  for (const s of students) {
+    if (!examCounts[s.examCode]) examCounts[s.examCode] = [];
+    examCounts[s.examCode].push(s);
+  }
+
+  const generalStudents: StudentRecord[] = [];
+  const regularStudents: StudentRecord[] = [];
+  for (const [code, list] of Object.entries(examCounts)) {
+    if (list.length >= GENERAL_EXAM_THRESHOLD) {
+      generalStudents.push(...list);
+    } else {
+      regularStudents.push(...list);
+    }
+  }
+
+  // Allocate general exam rooms first (simple sequential, no adjacency checks)
+  const generalRooms = generalStudents.length > 0
+    ? allocateGeneralExamRooms(generalStudents, GENERAL_EXAM_CONFIG, 1)
+    : [];
+
+  // Now allocate regular students with normal logic
+  const regularStartRoom = generalRooms.length + 1;
+
+  if (regularStudents.length === 0) {
+    return {
+      rooms: generalRooms,
+      patternDecision: { pattern: 'CRISS_CROSS', message: generalRooms.length > 0 ? `All ${generalStudents.length} students belong to general exam codes (≥${GENERAL_EXAM_THRESHOLD}). Allocated in ${generalRooms.length} general exam rooms (30/room, no adjacency restriction).` : null, violations: 0 },
+    };
+  }
+
   const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
   const totalCols = mainColumns * seatsPerColumn;
   const rows = Math.ceil(studentsPerRoom / totalCols);
 
   const examGroups: Record<string, StudentRecord[]> = {};
-  for (const s of students) {
+  for (const s of regularStudents) {
     if (!examGroups[s.examCode]) examGroups[s.examCode] = [];
     examGroups[s.examCode].push(s);
   }
@@ -493,10 +525,17 @@ export function allocateRooms(
     });
   }
 
-  const total = students.length;
+  const total = regularStudents.length;
   const roomsNeeded = Math.ceil(total / studentsPerRoom);
 
   const patternDecision = decidePattern(examGroups, roomsNeeded, mainColumns, seatsPerColumn, rows);
+
+  // Add info about general exam rooms if any
+  if (generalRooms.length > 0) {
+    const generalCodes = [...new Set(generalStudents.map(s => s.examCode))].join(', ');
+    const prefix = `${generalStudents.length} students from general exam code(s) [${generalCodes}] allocated to ${generalRooms.length} separate rooms (30/room). `;
+    patternDecision.message = prefix + (patternDecision.message || '');
+  }
 
   const { oddQueue: poolOdd, evenQueue: poolEven, midQueue: poolMid } = buildThreeQueues(examGroups);
 
@@ -615,13 +654,15 @@ export function allocateRooms(
     const roomStudents = grid.flat().filter((s): s is StudentRecord => s !== null);
 
     rooms.push({
-      roomNumber: r + 1,
+      roomNumber: regularStartRoom + r,
       students: roomStudents,
       grid,
       totalRows: rows,
       seatsPerRow: totalCols,
+      isGeneralExam: false,
+      roomConfig: config,
     });
   }
 
-  return { rooms, patternDecision };
+  return { rooms: [...generalRooms, ...rooms], patternDecision };
 }
