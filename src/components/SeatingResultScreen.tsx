@@ -135,8 +135,13 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const progress = totalStudentsAll > 0 ? Math.round((visibleStudentsAll / totalStudentsAll) * 100) : 0;
 
   // Compute violations per room
+  // Compute violations per room (skip adjacency violations for general exam rooms)
   const roomViolations = useMemo(() => {
     return rooms.map(room => {
+      // General exam rooms: same exam code is allowed next to each other
+      if (room.isGeneralExam) {
+        return { count: 0, violatedCells: new Set<string>() };
+      }
       const violatedCells = new Set<string>();
       const totalRows = room.grid.length;
       const totalCols = room.grid[0]?.length || 0;
@@ -172,32 +177,35 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const totalViolations = roomViolations.reduce((sum, v) => sum + v.count, 0);
 
   // Determine seat type label based on position
-  const getSeatTypeLabel = (rowIdx: number, colIdx: number): string => {
-    const sc = colIdx % config.seatsPerColumn;
-    if (sc === 0 || sc === config.seatsPerColumn - 1) return 'A';
+  const getSeatTypeLabel = (rowIdx: number, colIdx: number, roomCfg: RoomConfig): string => {
+    const sc = colIdx % roomCfg.seatsPerColumn;
+    if (sc === 0 || sc === roomCfg.seatsPerColumn - 1) return 'A';
     return 'B';
   };
+
+  const getRoomConfig = (room: RoomAllocation): RoomConfig => room.roomConfig || config;
 
   const renderRoomGrid = (room: RoomAllocation, roomIndex: number, forPrint = false) => {
     const violations = roomViolations[roomIndex];
     const showReveal = !forPrint;
+    const rc = getRoomConfig(room);
 
     return (
       <table className="border-collapse mx-auto" style={{ borderSpacing: 0 }}>
         <thead>
           <tr>
-            {Array.from({ length: config.mainColumns }).map((_, mc) => (
+            {Array.from({ length: rc.mainColumns }).map((_, mc) => (
               <React.Fragment key={mc}>
-                {Array.from({ length: config.seatsPerColumn }).map((_, sc) => (
+                {Array.from({ length: rc.seatsPerColumn }).map((_, sc) => (
                   <th
                     key={`${mc}-${sc}`}
                     className="border border-border px-2 py-2 text-xs font-semibold bg-secondary text-secondary-foreground"
                     style={{ minWidth: 90 }}
                   >
-                    {mc * config.seatsPerColumn + sc + 1}
+                    {mc * rc.seatsPerColumn + sc + 1}
                   </th>
                 ))}
-                {mc < config.mainColumns - 1 && (
+                {mc < rc.mainColumns - 1 && (
                   <th className="w-4 border-none" style={{ minWidth: 16 }} />
                 )}
               </React.Fragment>
@@ -208,16 +216,16 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           {room.grid.map((row, rowIdx) => (
             <tr key={rowIdx}>
               {row.map((student, colIdx) => {
-                const mc = Math.floor(colIdx / config.seatsPerColumn);
-                const sc = colIdx % config.seatsPerColumn;
-                const isLastSubCol = sc === config.seatsPerColumn - 1;
-                const isLastMainCol = mc === config.mainColumns - 1;
+                const mc = Math.floor(colIdx / rc.seatsPerColumn);
+                const sc = colIdx % rc.seatsPerColumn;
+                const isLastSubCol = sc === rc.seatsPerColumn - 1;
+                const isLastMainCol = mc === rc.mainColumns - 1;
                 const showSeparator = isLastSubCol && !isLastMainCol;
 
                 const isOccupied = student !== null;
                 const isVisible = forPrint ? true : (isOccupied && visibleExamCodes.has(student!.examCode));
                 const isViolation = violations?.violatedCells.has(`${rowIdx}-${colIdx}`);
-                const seatLabel = getSeatTypeLabel(rowIdx, colIdx);
+                const seatLabel = getSeatTypeLabel(rowIdx, colIdx, rc);
 
                 let cellContent: React.ReactNode;
                 let cellBg: string;
@@ -364,6 +372,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
               style={hasViolation && i !== activeRoom ? { borderColor: '#EF4444' } : undefined}
             >
               Room {room.roomNumber}
+              {room.isGeneralExam && <span className="text-xs ml-1 opacity-70">(GE)</span>}
               {hasViolation && <span style={{ color: '#EF4444' }}> •</span>}
             </button>
           );
@@ -431,6 +440,9 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           </Button>
           <h3 className="text-xl font-bold text-center">
             Room {rooms[activeRoom].roomNumber}
+            {rooms[activeRoom].isGeneralExam && (
+              <span className="text-sm font-medium text-muted-foreground ml-2">(General Exam)</span>
+            )}
             <span className="text-sm font-normal text-muted-foreground ml-2">
               ({rooms[activeRoom].students.length} students)
             </span>
@@ -490,6 +502,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '2px solid #000', paddingBottom: 8 }}>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>
                   Room No: <span style={{ display: 'inline-block', width: 120, borderBottom: '1px solid #000' }}>&nbsp;</span>
+                  {room.isGeneralExam && <span style={{ fontSize: 10, color: '#666', marginLeft: 8 }}>(General Exam)</span>}
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>
                   Date: <span style={{ display: 'inline-block', width: 140, borderBottom: '1px solid #000' }}>&nbsp;</span>
@@ -497,63 +510,67 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
               </div>
 
               {/* Seating grid — seat numbers + roll numbers only */}
-              <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
-                <thead>
-                  <tr>
-                    {Array.from({ length: config.mainColumns }).map((_, mc) => (
-                      <React.Fragment key={mc}>
-                        <th style={{ border: '1px solid #000', padding: '3px 2px', fontSize: 10, fontWeight: 700, textAlign: 'center', width: 28, backgroundColor: '#f0f0f0' }}>
-                          S.No
-                        </th>
-                        {Array.from({ length: config.seatsPerColumn }).map((_, sc) => (
-                          <th key={sc} style={{ border: '1px solid #000', padding: '3px 4px', fontSize: 10, fontWeight: 700, textAlign: 'center', backgroundColor: '#f0f0f0' }}>
-                            S{mc * config.seatsPerColumn + sc + 1}
-                          </th>
-                        ))}
-                        {mc < config.mainColumns - 1 && (
-                          <th style={{ width: 8, border: 'none' }} />
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {room.grid.map((row, rowIdx) => (
-                    <tr key={rowIdx}>
-                      {Array.from({ length: config.mainColumns }).map((_, mc) => {
-                        const seatNumber = mc * room.grid.length + rowIdx + 1;
-                        return (
+              {(() => {
+                const rc = getRoomConfig(room);
+                return (
+                  <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
+                    <thead>
+                      <tr>
+                        {Array.from({ length: rc.mainColumns }).map((_, mc) => (
                           <React.Fragment key={mc}>
-                            <td style={{ border: '1px solid #000', padding: '2px', fontSize: 10, fontWeight: 700, textAlign: 'center', backgroundColor: '#f0f0f0' }}>
-                              {seatNumber}
-                            </td>
-                            {Array.from({ length: config.seatsPerColumn }).map((_, sc) => {
-                              const colIdx = mc * config.seatsPerColumn + sc;
-                              const student = row[colIdx];
-                              const color = student ? getExamCodeColor(student.examCode) : null;
-                              return (
-                                <td key={sc} style={{ border: '1px solid #000', padding: '3px 4px', textAlign: 'center', height: 28 }}>
-                                  {student ? (
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: color!.bg, fontFamily: 'monospace' }}>
-                                      {student.rollNumber}
-                                    </span>
-                                  ) : (
-                                    <span style={{ color: '#ccc', fontSize: 10 }}>—</span>
-                                  )}
-                                </td>
-                              );
-                            })}
-                            {mc < config.mainColumns - 1 && (
-                              <td style={{ width: 8, border: 'none' }} />
+                            <th style={{ border: '1px solid #000', padding: '3px 2px', fontSize: 10, fontWeight: 700, textAlign: 'center', width: 28, backgroundColor: '#f0f0f0' }}>
+                              S.No
+                            </th>
+                            {Array.from({ length: rc.seatsPerColumn }).map((_, sc) => (
+                              <th key={sc} style={{ border: '1px solid #000', padding: '3px 4px', fontSize: 10, fontWeight: 700, textAlign: 'center', backgroundColor: '#f0f0f0' }}>
+                                S{mc * rc.seatsPerColumn + sc + 1}
+                              </th>
+                            ))}
+                            {mc < rc.mainColumns - 1 && (
+                              <th style={{ width: 8, border: 'none' }} />
                             )}
                           </React.Fragment>
-                        );
-                      })}
-                    </tr>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {room.grid.map((row, rowIdx) => (
+                        <tr key={rowIdx}>
+                          {Array.from({ length: rc.mainColumns }).map((_, mc) => {
+                            const seatNumber = mc * room.grid.length + rowIdx + 1;
+                            return (
+                              <React.Fragment key={mc}>
+                                <td style={{ border: '1px solid #000', padding: '2px', fontSize: 10, fontWeight: 700, textAlign: 'center', backgroundColor: '#f0f0f0' }}>
+                                  {seatNumber}
+                                </td>
+                                {Array.from({ length: rc.seatsPerColumn }).map((_, sc) => {
+                                  const colIdx = mc * rc.seatsPerColumn + sc;
+                                  const student = row[colIdx];
+                                  const color = student ? getExamCodeColor(student.examCode) : null;
+                                  return (
+                                    <td key={sc} style={{ border: '1px solid #000', padding: '3px 4px', textAlign: 'center', height: 28 }}>
+                                      {student ? (
+                                        <span style={{ fontSize: 11, fontWeight: 700, color: color!.bg, fontFamily: 'monospace' }}>
+                                          {student.rollNumber}
+                                        </span>
+                                      ) : (
+                                        <span style={{ color: '#ccc', fontSize: 10 }}>—</span>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                                {mc < rc.mainColumns - 1 && (
+                                  <td style={{ width: 8, border: 'none' }} />
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tr>
                   ))}
-                </tbody>
-              </table>
-
+                    </tbody>
+                  </table>
+                );
+              })()}
               {/* Summary footer: department, exam code, count */}
               <div style={{ marginTop: 10, borderTop: '2px solid #000', paddingTop: 6 }}>
                 <table style={{ borderCollapse: 'collapse', width: '100%' }}>
