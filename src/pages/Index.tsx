@@ -99,6 +99,7 @@ const Index = () => {
             config={roomConfig}
             patternDecision={patternDecision}
             onBack={() => setCurrentStep(3)}
+            onAddRoom={handleAddRoom}
           />
         )}
       </div>
