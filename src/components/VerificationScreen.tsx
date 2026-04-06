@@ -1,6 +1,20 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { StudentRecord, PdfExtractionResult, getDeptColor, getExamCodeColor } from '@/lib/seating-utils';
+import { StudentRecord, PdfExtractionResult } from '@/lib/seating-utils';
+
+const VERIFY_COLORS = [
+  { bg: '#1D1D1F', text: '#FFFFFF' },
+  { bg: '#3A3A3C', text: '#FFFFFF' },
+  { bg: '#6E6E73', text: '#FFFFFF' },
+  { bg: '#AEAEB2', text: '#000000' },
+];
+const verifyColorMap: Record<string, { bg: string; text: string }> = {};
+function getVerifyColor(dept: string) {
+  if (!verifyColorMap[dept]) {
+    verifyColorMap[dept] = VERIFY_COLORS[Object.keys(verifyColorMap).length % VERIFY_COLORS.length];
+  }
+  return verifyColorMap[dept];
+}
 
 interface VerificationScreenProps {
   students: StudentRecord[];
