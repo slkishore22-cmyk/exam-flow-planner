@@ -554,13 +554,16 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                                 {Array.from({ length: rc.seatsPerColumn }).map((_, sc) => {
                                   const colIdx = mc * rc.seatsPerColumn + sc;
                                   const student = row[colIdx];
-                                  const color = student ? getExamCodeColor(student.examCode) : null;
+                                  const isVacant = student?.examCode === 'VACANT';
+                                  const color = student && !isVacant ? getExamCodeColor(student.examCode) : null;
                                   return (
                                     <td key={sc} style={{ border: '1px solid #000', padding: '3px 4px', textAlign: 'center', height: 28 }}>
-                                      {student ? (
+                                      {student && !isVacant ? (
                                         <span style={{ fontSize: 11, fontWeight: 700, color: color!.bg, fontFamily: 'monospace' }}>
                                           {student.rollNumber}
                                         </span>
+                                      ) : isVacant ? (
+                                        <span style={{ color: '#C7C7CC', fontSize: 10 }}>—</span>
                                       ) : (
                                         <span style={{ color: '#ccc', fontSize: 10 }}>—</span>
                                       )}
