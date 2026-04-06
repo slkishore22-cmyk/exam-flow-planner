@@ -28,8 +28,6 @@ export interface RoomAllocation {
   seatsPerRow: number;
   isGeneralExam?: boolean;
   roomConfig?: RoomConfig; // per-room config (may differ for general exam rooms)
-  roomExamCode?: string; // single exam code for this room (regular rooms)
-  roomExamLabel?: string; // display label e.g. "CPZ6B"
 }
 
 export type PatternType = 'CRISS_CROSS' | 'CHECKERBOARD';
@@ -472,19 +470,11 @@ function allocateGeneralExamRooms(
   return rooms;
 }
 
-// Sentinel record for VACANT seats
-const VACANT_STUDENT: StudentRecord = {
-  rollNumber: '—',
-  department: '',
-  examCode: 'VACANT',
-  sourcePdf: '',
-};
-
 export function allocateRooms(
   students: StudentRecord[],
   config: RoomConfig
 ): AllocationResult {
-  // Split: exam codes with >=GENERAL_EXAM_THRESHOLD students → general exam rooms
+  // Split: exam codes with >GENERAL_EXAM_THRESHOLD students → general exam rooms
   const examCounts: Record<string, StudentRecord[]> = {};
   for (const s of students) {
     if (!examCounts[s.examCode]) examCounts[s.examCode] = [];
@@ -501,11 +491,12 @@ export function allocateRooms(
     }
   }
 
-  // Allocate general exam rooms first
+  // Allocate general exam rooms first (simple sequential, no adjacency checks)
   const generalRooms = generalStudents.length > 0
     ? allocateGeneralExamRooms(generalStudents, GENERAL_EXAM_CONFIG, 1)
     : [];
 
+  // Now allocate regular students with normal logic
   const regularStartRoom = generalRooms.length + 1;
 
   if (regularStudents.length === 0) {
@@ -515,32 +506,18 @@ export function allocateRooms(
     };
   }
 
-  const { mainColumns, seatsPerColumn } = config;
+  const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
   const totalCols = mainColumns * seatsPerColumn;
-  const rows = Math.ceil(config.studentsPerRoom / totalCols);
+  const rows = Math.ceil(studentsPerRoom / totalCols);
 
-  // Odd columns (0-indexed): first sub-column of each main column = 0, 3, 6
-  const oddCols: number[] = [];
-  for (let mc = 0; mc < mainColumns; mc++) {
-    oddCols.push(mc * seatsPerColumn); // col 0, 3, 6
-  }
-  const oddSeatsPerRow = oddCols.length; // 3
-  const totalOddSeats = oddSeatsPerRow * rows; // 15
-
-  // Pattern: alternate 9 and 6 students per room
-  // Room A: 3 rows × 3 odd cols = 9
-  // Room B: 2 rows × 3 odd cols = 6
-  const patternA = oddSeatsPerRow * 3; // 9
-  const patternB = oddSeatsPerRow * 2; // 6
-
-  // Group regular students by exam code, sorted by roll number
-  const regularExamGroups: Record<string, StudentRecord[]> = {};
+  const examGroups: Record<string, StudentRecord[]> = {};
   for (const s of regularStudents) {
-    if (!regularExamGroups[s.examCode]) regularExamGroups[s.examCode] = [];
-    regularExamGroups[s.examCode].push(s);
+    if (!examGroups[s.examCode]) examGroups[s.examCode] = [];
+    examGroups[s.examCode].push(s);
   }
-  for (const code of Object.keys(regularExamGroups)) {
-    regularExamGroups[code].sort((a, b) => {
+
+  for (const code of Object.keys(examGroups)) {
+    examGroups[code].sort((a, b) => {
       const aNum = parseInt(a.rollNumber);
       const bNum = parseInt(b.rollNumber);
       if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
@@ -548,74 +525,144 @@ export function allocateRooms(
     });
   }
 
-  // Sort exam codes by count descending for stable ordering
-  const sortedCodes = Object.entries(regularExamGroups)
-    .sort((a, b) => b[1].length - a[1].length)
-    .map(([code]) => code);
+  const total = regularStudents.length;
+  const roomsNeeded = Math.ceil(total / studentsPerRoom);
 
-  const rooms: RoomAllocation[] = [];
-  let roomNumber = regularStartRoom;
+  const patternDecision = decidePattern(examGroups, roomsNeeded, mainColumns, seatsPerColumn, rows);
 
-  for (const examCode of sortedCodes) {
-    const queue = [...regularExamGroups[examCode]];
-    let isFirstRoom = true; // alternates: true=9, false=6
-
-    while (queue.length > 0) {
-      const capacity = isFirstRoom ? patternA : patternB;
-      const roomStudents = queue.splice(0, capacity);
-
-      // Build grid: full rows × totalCols, only odd cols get students
-      const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
-
-      let idx = 0;
-      // Fill order: row by row, only odd columns
-      const rowsToFill = isFirstRoom ? 3 : 2;
-      for (let r = 0; r < rowsToFill && idx < roomStudents.length; r++) {
-        for (const col of oddCols) {
-          if (idx < roomStudents.length) {
-            grid[r][col] = roomStudents[idx++];
-          }
-        }
-      }
-
-      // Fill remaining odd seats in this room with VACANT
-      for (let r = 0; r < rows; r++) {
-        for (const col of oddCols) {
-          if (grid[r][col] === null) {
-            grid[r][col] = { ...VACANT_STUDENT };
-          }
-        }
-      }
-
-      rooms.push({
-        roomNumber,
-        students: roomStudents,
-        grid,
-        totalRows: rows,
-        seatsPerRow: totalCols,
-        isGeneralExam: false,
-        roomConfig: config,
-        roomExamCode: examCode,
-        roomExamLabel: `${examCode} (${roomStudents.length} students)`,
-      });
-
-      roomNumber++;
-      isFirstRoom = !isFirstRoom;
-    }
-  }
-
-  // Build pattern decision message
-  let message: string | null = null;
+  // Add info about general exam rooms if any
   if (generalRooms.length > 0) {
     const generalCodes = [...new Set(generalStudents.map(s => s.examCode))].join(', ');
-    message = `${generalStudents.length} students from general exam code(s) [${generalCodes}] allocated to ${generalRooms.length} separate rooms (30/room). `;
+    const prefix = `${generalStudents.length} students from general exam code(s) [${generalCodes}] allocated to ${generalRooms.length} separate rooms (30/room). `;
+    patternDecision.message = prefix + (patternDecision.message || '');
   }
-  const totalRegularRooms = rooms.length;
-  const examCodeCount = sortedCodes.length;
-  message = (message || '') + `${regularStudents.length} regular students across ${examCodeCount} exam codes allocated to ${totalRegularRooms} rooms (1 exam per room, 9→6 pattern).`;
 
-  return {
-    rooms: [...generalRooms, ...rooms],
-    patternDecision: { pattern: 'CRISS_CROSS', message, violations: 0 },
-  };
+  const { oddQueue: poolOdd, evenQueue: poolEven, midQueue: poolMid } = buildThreeQueues(examGroups);
+
+  let currentOddCode = poolOdd[0]?.examCode || null;
+  let currentEvenCode = poolEven[0]?.examCode || null;
+
+  const rooms: RoomAllocation[] = [];
+
+  for (let r = 0; r < roomsNeeded; r++) {
+    const maxSeats = Math.min(studentsPerRoom, total - r * studentsPerRoom);
+    const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
+    let seatedCount = 0;
+
+    if (patternDecision.pattern === 'CHECKERBOARD') {
+      const { aPositions, bPositions } = buildCheckerboardOrder(rows, mainColumns, seatsPerColumn);
+      const allPools = [...poolOdd.splice(0, poolOdd.length), ...poolEven.splice(0, poolEven.length), ...poolMid.splice(0, poolMid.length)];
+
+      for (const [row, col] of aPositions) {
+        if (seatedCount >= maxSeats || allPools.length === 0) break;
+        const nc = getNeighborCodes(grid, row, col, rows, totalCols);
+        const s = pickBest(allPools, nc);
+        if (s) { grid[row][col] = s; seatedCount++; }
+      }
+      for (const [row, col] of bPositions) {
+        if (seatedCount >= maxSeats || allPools.length === 0) break;
+        const nc = getNeighborCodes(grid, row, col, rows, totalCols);
+        const s = pickBest(allPools, nc);
+        if (s) { grid[row][col] = s; seatedCount++; }
+      }
+      poolOdd.push(...allPools);
+    } else {
+      const { oddPositions, evenPositions, middlePositions } = buildThreePassOrder(rows, mainColumns, seatsPerColumn);
+
+      if (poolOdd.length > 0 && !poolOdd.find(s => s.examCode === currentOddCode)) {
+        currentOddCode = poolOdd[0]?.examCode || null;
+      }
+      if (poolEven.length > 0 && !poolEven.find(s => s.examCode === currentEvenCode)) {
+        currentEvenCode = poolEven[0]?.examCode || null;
+      }
+
+      for (const [row, col] of oddPositions) {
+        if (seatedCount >= maxSeats) break;
+        const neighbors = getNeighborCodes(grid, row, col, rows, totalCols);
+
+        if (poolOdd.length > 0) {
+          if (currentOddCode && !neighbors.has(currentOddCode)) {
+            const idx = poolOdd.findIndex(s => s.examCode === currentOddCode);
+            if (idx >= 0) {
+              grid[row][col] = poolOdd.splice(idx, 1)[0];
+              seatedCount++;
+              continue;
+            }
+          }
+          const s = pickBest(poolOdd, neighbors);
+          if (s) { grid[row][col] = s; seatedCount++; continue; }
+        }
+        if (poolEven.length > 0) {
+          const s = pickBest(poolEven, getNeighborCodes(grid, row, col, rows, totalCols));
+          if (s) { grid[row][col] = s; seatedCount++; }
+        }
+      }
+
+      for (const [row, col] of evenPositions) {
+        if (grid[row][col] !== null || seatedCount >= maxSeats) continue;
+        const neighbors = getNeighborCodes(grid, row, col, rows, totalCols);
+        if (currentOddCode) neighbors.add(currentOddCode);
+
+        if (poolEven.length > 0) {
+          if (currentEvenCode && !neighbors.has(currentEvenCode)) {
+            const idx = poolEven.findIndex(s => s.examCode === currentEvenCode);
+            if (idx >= 0) {
+              grid[row][col] = poolEven.splice(idx, 1)[0];
+              seatedCount++;
+              continue;
+            }
+          }
+          const s = pickBest(poolEven, neighbors);
+          if (s) { grid[row][col] = s; seatedCount++; continue; }
+        }
+        if (poolOdd.length > 0) {
+          const s = pickBest(poolOdd, getNeighborCodes(grid, row, col, rows, totalCols));
+          if (s) { grid[row][col] = s; seatedCount++; }
+        }
+      }
+
+      for (const [row, col] of middlePositions) {
+        if (grid[row][col] !== null || seatedCount >= maxSeats) continue;
+
+        const neighbors = getNeighborCodes(grid, row, col, rows, totalCols);
+        if (currentOddCode) neighbors.add(currentOddCode);
+        if (currentEvenCode) neighbors.add(currentEvenCode);
+        if (row > 0 && grid[row - 1][col]) {
+          neighbors.add(grid[row - 1][col]!.examCode);
+        }
+
+        let student: StudentRecord | null = null;
+        if (poolMid.length > 0) {
+          student = pickBest(poolMid, neighbors);
+          if (!student) {
+            const strict = getNeighborCodes(grid, row, col, rows, totalCols);
+            student = pickBest(poolMid, strict);
+          }
+          if (student) { grid[row][col] = student; seatedCount++; continue; }
+        }
+        if (poolEven.length > 0) {
+          student = pickBest(poolEven, getNeighborCodes(grid, row, col, rows, totalCols));
+          if (student) { grid[row][col] = student; seatedCount++; continue; }
+        }
+        if (poolOdd.length > 0) {
+          student = pickBest(poolOdd, getNeighborCodes(grid, row, col, rows, totalCols));
+          if (student) { grid[row][col] = student; seatedCount++; }
+        }
+      }
+    }
+
+    const roomStudents = grid.flat().filter((s): s is StudentRecord => s !== null);
+
+    rooms.push({
+      roomNumber: regularStartRoom + r,
+      students: roomStudents,
+      grid,
+      totalRows: rows,
+      seatsPerRow: totalCols,
+      isGeneralExam: false,
+      roomConfig: config,
+    });
+  }
+
+  return { rooms: [...generalRooms, ...rooms], patternDecision };
 }

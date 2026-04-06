@@ -232,18 +232,10 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 let cellBorder: string;
 
                 if (!isOccupied) {
-                  // Truly empty seat (even columns)
+                  // Truly empty seat
                   cellBg = 'hsl(var(--muted))';
-                  cellBorder = '1px solid hsl(var(--border))';
-                  const seatLabel = getSeatTypeLabel(rowIdx, colIdx, rc);
-                  cellContent = (
-                    <span className="text-muted-foreground text-xs font-medium">{seatLabel}</span>
-                  );
-                } else if (student!.examCode === 'VACANT') {
-                  // VACANT placeholder
-                  cellBg = '#F5F5F7';
-                  cellBorder = '1px solid #E5E5EA';
-                  cellContent = <span style={{ color: '#C7C7CC', fontSize: 12 }}>—</span>;
+                  cellBorder = '2px solid white';
+                  cellContent = <span className="text-muted-foreground text-xs">—</span>;
                 } else if (!isVisible && showReveal) {
                   // Occupied but hidden — show placeholder with seat label
                   cellBg = 'hsl(var(--muted))';
@@ -451,14 +443,14 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
             {rooms[activeRoom].isGeneralExam && (
               <span className="text-sm font-medium text-muted-foreground ml-2">(General Exam)</span>
             )}
-            {rooms[activeRoom].roomExamCode && (
-              <span className="text-sm font-medium ml-2" style={{ color: getExamCodeColor(rooms[activeRoom].roomExamCode!).bg }}>
-                — {rooms[activeRoom].roomExamCode}
-              </span>
-            )}
             <span className="text-sm font-normal text-muted-foreground ml-2">
               ({rooms[activeRoom].students.length} students)
             </span>
+            {activeViolations > 0 && (
+              <span className="text-sm font-semibold ml-2" style={{ color: '#EF4444' }}>
+                — {activeViolations} violation{activeViolations !== 1 ? 's' : ''}
+              </span>
+            )}
           </h3>
           <Button
             variant="outline"
@@ -511,7 +503,6 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 <div style={{ fontSize: 14, fontWeight: 700 }}>
                   Room No: <span style={{ display: 'inline-block', width: 120, borderBottom: '1px solid #000' }}>&nbsp;</span>
                   {room.isGeneralExam && <span style={{ fontSize: 10, color: '#666', marginLeft: 8 }}>(General Exam)</span>}
-                  {room.roomExamCode && <span style={{ fontSize: 12, fontWeight: 700, marginLeft: 12 }}>— {room.roomExamCode} ({room.students.length} students)</span>}
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>
                   Date: <span style={{ display: 'inline-block', width: 140, borderBottom: '1px solid #000' }}>&nbsp;</span>
@@ -555,16 +546,13 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                                 {Array.from({ length: rc.seatsPerColumn }).map((_, sc) => {
                                   const colIdx = mc * rc.seatsPerColumn + sc;
                                   const student = row[colIdx];
-                                  const isVacant = student?.examCode === 'VACANT';
-                                  const color = student && !isVacant ? getExamCodeColor(student.examCode) : null;
+                                  const color = student ? getExamCodeColor(student.examCode) : null;
                                   return (
                                     <td key={sc} style={{ border: '1px solid #000', padding: '3px 4px', textAlign: 'center', height: 28 }}>
-                                      {student && !isVacant ? (
+                                      {student ? (
                                         <span style={{ fontSize: 11, fontWeight: 700, color: color!.bg, fontFamily: 'monospace' }}>
                                           {student.rollNumber}
                                         </span>
-                                      ) : isVacant ? (
-                                        <span style={{ color: '#C7C7CC', fontSize: 10 }}>—</span>
                                       ) : (
                                         <span style={{ color: '#ccc', fontSize: 10 }}>—</span>
                                       )}
