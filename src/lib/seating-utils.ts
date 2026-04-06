@@ -28,6 +28,8 @@ export interface RoomAllocation {
   seatsPerRow: number;
   isGeneralExam?: boolean;
   roomConfig?: RoomConfig; // per-room config (may differ for general exam rooms)
+  roomExamCode?: string; // single exam code for this room (regular rooms)
+  roomExamLabel?: string; // display label e.g. "CPZ6B"
 }
 
 export type PatternType = 'CRISS_CROSS' | 'CHECKERBOARD';
