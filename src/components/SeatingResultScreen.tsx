@@ -511,6 +511,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 <div style={{ fontSize: 14, fontWeight: 700 }}>
                   Room No: <span style={{ display: 'inline-block', width: 120, borderBottom: '1px solid #000' }}>&nbsp;</span>
                   {room.isGeneralExam && <span style={{ fontSize: 10, color: '#666', marginLeft: 8 }}>(General Exam)</span>}
+                  {room.roomExamCode && <span style={{ fontSize: 12, fontWeight: 700, marginLeft: 12 }}>— {room.roomExamCode} ({room.students.length} students)</span>}
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>
                   Date: <span style={{ display: 'inline-block', width: 140, borderBottom: '1px solid #000' }}>&nbsp;</span>
