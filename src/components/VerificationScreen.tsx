@@ -116,7 +116,7 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
             </thead>
             <tbody>
               {students.map((s, i) => {
-                const color = getDeptColor(s.department);
+                const color = getVerifyColor(s.department);
                 return (
                   <tr key={s.rollNumber} className="border-t">
                     <td className="p-3">{i + 1}</td>
