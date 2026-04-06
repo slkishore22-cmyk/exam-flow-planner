@@ -9,9 +9,9 @@ import {
   StudentRecord,
   RoomConfig,
   RoomAllocation,
-  PatternDecision,
+  RankingEntry,
+  SeatGroup,
   deduplicateStudents,
-  interleaveStudents,
   allocateRooms,
 } from '@/lib/seating-utils';
 
@@ -23,7 +23,8 @@ const Index = () => {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [rooms, setRooms] = useState<RoomAllocation[]>([]);
   const [roomConfig, setRoomConfig] = useState<RoomConfig>({ studentsPerRoom: 45, mainColumns: 3, seatsPerColumn: 3 });
-  const [patternDecision, setPatternDecision] = useState<PatternDecision | null>(null);
+  const [rankingTable, setRankingTable] = useState<RankingEntry[]>([]);
+  const [examToGroup, setExamToGroup] = useState<Record<string, SeatGroup>>({});
 
   const handleUploadComplete = (results: PdfExtractionResult[], files: File[]) => {
     setPdfResults(results);
@@ -43,26 +44,24 @@ const Index = () => {
     setRoomConfig(config);
     const result = allocateRooms([...students], config);
     setRooms(result.rooms);
-    setPatternDecision(result.patternDecision);
+    setRankingTable(result.rankingTable);
+    setExamToGroup(result.examToGroup);
     setCurrentStep(4);
   };
 
   const handleAddRoom = () => {
-    // Reduce students per room so one more room is created, then regenerate
-    const currentRooms = Math.ceil(students.length / roomConfig.studentsPerRoom);
-    const newRoomCount = currentRooms + 1;
-    const newStudentsPerRoom = Math.ceil(students.length / newRoomCount);
+    const currentRooms = rooms.length;
+    const newStudentsPerRoom = Math.ceil(students.length / (currentRooms + 1));
     const newConfig = { ...roomConfig, studentsPerRoom: newStudentsPerRoom };
     setRoomConfig(newConfig);
     const result = allocateRooms([...students], newConfig);
     setRooms(result.rooms);
-    setPatternDecision(result.patternDecision);
+    setRankingTable(result.rankingTable);
+    setExamToGroup(result.examToGroup);
   };
 
   const handleStepClick = (step: number) => {
-    if (step < currentStep) {
-      setCurrentStep(step);
-    }
+    if (step < currentStep) setCurrentStep(step);
   };
 
   return (
@@ -72,10 +71,7 @@ const Index = () => {
       </div>
       <div className="pb-16">
         {currentStep === 1 && (
-          <UploadScreen
-            onComplete={handleUploadComplete}
-            initialFiles={uploadedFiles}
-          />
+          <UploadScreen onComplete={handleUploadComplete} initialFiles={uploadedFiles} />
         )}
         {currentStep === 2 && (
           <VerificationScreen
@@ -97,7 +93,8 @@ const Index = () => {
           <SeatingResultScreen
             rooms={rooms}
             config={roomConfig}
-            patternDecision={patternDecision}
+            rankingTable={rankingTable}
+            examToGroup={examToGroup}
             onBack={() => setCurrentStep(3)}
             onAddRoom={handleAddRoom}
           />
