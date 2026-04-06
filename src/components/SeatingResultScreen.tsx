@@ -451,14 +451,14 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
             {rooms[activeRoom].isGeneralExam && (
               <span className="text-sm font-medium text-muted-foreground ml-2">(General Exam)</span>
             )}
+            {rooms[activeRoom].roomExamCode && (
+              <span className="text-sm font-medium ml-2" style={{ color: getExamCodeColor(rooms[activeRoom].roomExamCode!).bg }}>
+                — {rooms[activeRoom].roomExamCode}
+              </span>
+            )}
             <span className="text-sm font-normal text-muted-foreground ml-2">
               ({rooms[activeRoom].students.length} students)
             </span>
-            {activeViolations > 0 && (
-              <span className="text-sm font-semibold ml-2" style={{ color: '#EF4444' }}>
-                — {activeViolations} violation{activeViolations !== 1 ? 's' : ''}
-              </span>
-            )}
           </h3>
           <Button
             variant="outline"
