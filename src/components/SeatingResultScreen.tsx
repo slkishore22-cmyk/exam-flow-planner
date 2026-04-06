@@ -5,6 +5,7 @@ import {
   RoomConfig,
   RankingEntry,
   SeatGroup,
+  StudentRecord,
   getGroup,
   GROUP_COLORS,
   EMPTY_CELL_COLOR,
