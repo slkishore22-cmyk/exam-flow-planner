@@ -152,7 +152,7 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
         <p className="text-sm font-semibold mb-3">Department Summary</p>
         <div className="flex flex-col gap-2">
           {deptSummary.map((entry) => {
-            const color = getDeptColor(entry.dept);
+            const color = getVerifyColor(entry.dept);
             return (
               <div key={`${entry.dept}-${entry.examCode}`} className="flex items-center gap-3 text-sm">
                 <span
