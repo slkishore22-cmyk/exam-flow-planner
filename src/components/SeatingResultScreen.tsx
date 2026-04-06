@@ -232,10 +232,18 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 let cellBorder: string;
 
                 if (!isOccupied) {
-                  // Truly empty seat
+                  // Truly empty seat (even columns)
                   cellBg = 'hsl(var(--muted))';
-                  cellBorder = '2px solid white';
-                  cellContent = <span className="text-muted-foreground text-xs">—</span>;
+                  cellBorder = '1px solid hsl(var(--border))';
+                  const seatLabel = getSeatTypeLabel(rowIdx, colIdx, rc);
+                  cellContent = (
+                    <span className="text-muted-foreground text-xs font-medium">{seatLabel}</span>
+                  );
+                } else if (student!.examCode === 'VACANT') {
+                  // VACANT placeholder
+                  cellBg = '#F5F5F7';
+                  cellBorder = '1px solid #E5E5EA';
+                  cellContent = <span style={{ color: '#C7C7CC', fontSize: 12 }}>—</span>;
                 } else if (!isVisible && showReveal) {
                   // Occupied but hidden — show placeholder with seat label
                   cellBg = 'hsl(var(--muted))';
