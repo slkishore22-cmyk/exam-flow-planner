@@ -205,13 +205,18 @@ type GroupLabel = 'A' | 'B' | 'C' | 'D';
  */
 function getGroupForCell(row: number, col: number): GroupLabel {
   const subCol = col % 3; // 0, 1, 2 within a panel
-  const isOddRow = row % 2 === 0; // rows 0,2,4 = "odd" display rows 1,3,5
-  const isMiddleCol = subCol === 1;
+  const isOddDisplayRow = row % 2 === 0; // rows 0,2,4
 
-  if (isMiddleCol) {
-    return isOddRow ? 'C' : 'D';
+  if (isOddDisplayRow) {
+    // A C B pattern
+    if (subCol === 0) return 'A';
+    if (subCol === 1) return 'C';
+    return 'B';
   } else {
-    return isOddRow ? 'A' : 'B';
+    // B D A pattern
+    if (subCol === 0) return 'B';
+    if (subCol === 1) return 'D';
+    return 'A';
   }
 }
 
