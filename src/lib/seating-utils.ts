@@ -28,87 +28,61 @@ export interface RoomAllocation {
   seatsPerRow: number;
 }
 
-export type PatternType = 'CRISS_CROSS' | 'CHECKERBOARD';
-
-export interface PatternDecision {
-  pattern: PatternType;
-  message: string | null;
-  violations: number | 'unavoidable';
+export interface GroupRanking {
+  rank: number;
+  group: 'A' | 'B' | 'C' | 'D';
+  examCode: string;
+  totalStudents: number;
 }
 
 export interface AllocationResult {
   rooms: RoomAllocation[];
-  patternDecision: PatternDecision;
+  groupRankings: GroupRanking[];
+  violations: number;
 }
 
-const DEPT_COLOR_PALETTE = [
-  { bg: '#D32F2F', text: '#FFFFFF', name: 'Red' },
-  { bg: '#1565C0', text: '#FFFFFF', name: 'Blue' },
-  { bg: '#2E7D32', text: '#FFFFFF', name: 'Green' },
-  { bg: '#FF6F00', text: '#000000', name: 'Orange' },
-  { bg: '#7B1FA2', text: '#FFFFFF', name: 'Purple' },
-  { bg: '#00897B', text: '#FFFFFF', name: 'Teal' },
-  { bg: '#C2185B', text: '#FFFFFF', name: 'Magenta' },
-  { bg: '#0277BD', text: '#FFFFFF', name: 'Sky Blue' },
-  { bg: '#827717', text: '#FFFFFF', name: 'Olive' },
-  { bg: '#4527A0', text: '#FFFFFF', name: 'Deep Purple' },
-  { bg: '#EF6C00', text: '#000000', name: 'Tangerine' },
-  { bg: '#00695C', text: '#FFFFFF', name: 'Dark Teal' },
-  { bg: '#AD1457', text: '#FFFFFF', name: 'Rose' },
-  { bg: '#1565C0', text: '#FFFFFF', name: 'Cobalt' },
-  { bg: '#558B2F', text: '#FFFFFF', name: 'Lime' },
+// ── Colors ──
+
+const EXAM_CODE_COLORS = [
+  { bg: '#D32F2F', text: '#FFFFFF' },
+  { bg: '#1565C0', text: '#FFFFFF' },
+  { bg: '#2E7D32', text: '#FFFFFF' },
+  { bg: '#FF6F00', text: '#000000' },
+  { bg: '#7B1FA2', text: '#FFFFFF' },
+  { bg: '#00897B', text: '#FFFFFF' },
+  { bg: '#C2185B', text: '#FFFFFF' },
+  { bg: '#0277BD', text: '#FFFFFF' },
+  { bg: '#827717', text: '#FFFFFF' },
+  { bg: '#4527A0', text: '#FFFFFF' },
+  { bg: '#EF6C00', text: '#000000' },
+  { bg: '#00695C', text: '#FFFFFF' },
+  { bg: '#AD1457', text: '#FFFFFF' },
+  { bg: '#558B2F', text: '#FFFFFF' },
+  { bg: '#424242', text: '#FFFFFF' },
 ];
 
-const FIXED_DEPT_COLORS: Record<string, { bg: string; text: string }> = {
-  'BBA':          { bg: '#D32F2F', text: '#FFFFFF' },   // Bold Red
-  'B.COM.':       { bg: '#1565C0', text: '#FFFFFF' },   // Blue
-  'B.SC.':        { bg: '#2E7D32', text: '#FFFFFF' },   // Green
-  'B.A':          { bg: '#FF6F00', text: '#000000' },   // Vivid Orange (was dull amber)
-  'MA':           { bg: '#7B1FA2', text: '#FFFFFF' },   // Vivid Purple
-  'B.COM.(CS)':   { bg: '#00897B', text: '#FFFFFF' },   // Teal
-  'BSC[VC]':      { bg: '#C2185B', text: '#FFFFFF' },   // Magenta (was deep orange — too close to red)
-  'M.COM.':       { bg: '#0277BD', text: '#FFFFFF' },   // Sky Blue (was dark pink — too close to red)
-  'M.SC.':        { bg: '#827717', text: '#FFFFFF' },   // Olive (was dark teal — too close to teal)
-  'B.COM.(CA)':   { bg: '#4527A0', text: '#FFFFFF' },   // Deep Purple (was indigo — too close to blue)
-  'UNKNOWN':      { bg: '#424242', text: '#FFFFFF' },
-};
-
-const deptColorMap: Record<string, { bg: string; text: string }> = {};
-
-export function getDeptColor(dept: string): { bg: string; text: string } {
-  if (FIXED_DEPT_COLORS[dept]) return FIXED_DEPT_COLORS[dept];
-
-  const clean = dept.toUpperCase().replace(/\s+/g, '').replace(/\.$/, '');
-  for (const [key, value] of Object.entries(FIXED_DEPT_COLORS)) {
-    const cleanKey = key.toUpperCase().replace(/\s+/g, '').replace(/\.$/, '');
-    if (clean === cleanKey || clean.includes(cleanKey) || cleanKey.includes(clean)) {
-      return value;
-    }
-  }
-
-  if (!deptColorMap[dept]) {
-    const usedColors = Object.values(deptColorMap).map(c => c.bg);
-    const available = DEPT_COLOR_PALETTE.filter(c => !usedColors.includes(c.bg));
-    deptColorMap[dept] = available.length > 0
-      ? available[0]
-      : DEPT_COLOR_PALETTE[Object.keys(deptColorMap).length % DEPT_COLOR_PALETTE.length];
-  }
-  return deptColorMap[dept];
-}
-
-// Exam-code-based color assignment — each unique exam code gets a distinct color
 const examCodeColorMap: Record<string, { bg: string; text: string }> = {};
 
 export function getExamCodeColor(examCode: string): { bg: string; text: string } {
   if (!examCodeColorMap[examCode]) {
     const usedColors = Object.values(examCodeColorMap).map(c => c.bg);
-    const available = DEPT_COLOR_PALETTE.filter(c => !usedColors.includes(c.bg));
+    const available = EXAM_CODE_COLORS.filter(c => !usedColors.includes(c.bg));
     examCodeColorMap[examCode] = available.length > 0
       ? available[0]
-      : DEPT_COLOR_PALETTE[Object.keys(examCodeColorMap).length % DEPT_COLOR_PALETTE.length];
+      : EXAM_CODE_COLORS[Object.keys(examCodeColorMap).length % EXAM_CODE_COLORS.length];
   }
   return examCodeColorMap[examCode];
 }
+
+// Group display colors (for the grid cells)
+export const GROUP_COLORS: Record<string, { bg: string; text: string }> = {
+  A: { bg: '#1D1D1F', text: '#FFFFFF' },
+  B: { bg: '#3A3A3C', text: '#FFFFFF' },
+  C: { bg: '#6E6E73', text: '#FFFFFF' },
+  D: { bg: '#AEAEB2', text: '#000000' },
+};
+
+// ── PDF Extraction ──
 
 export async function extractRollNumbersFromPdf(
   file: File,
@@ -214,224 +188,62 @@ export function deduplicateStudents(
   return students;
 }
 
-export function interleaveStudents(students: StudentRecord[]): StudentRecord[] {
-  const deptMap: Record<string, StudentRecord[]> = {};
+// ── NEW Seating Algorithm ──
+
+type GroupLabel = 'A' | 'B' | 'C' | 'D';
+
+/**
+ * For a 5×9 grid (3 panels × 3 sub-cols), returns the group label for each cell.
+ * 
+ * Pattern per panel:
+ *   Col:  1  2  3
+ *   R1:   A  C  A
+ *   R2:   B  D  B
+ *   R3:   A  C  A
+ *   R4:   B  D  B
+ *   R5:   A  C  A
+ */
+function getGroupForCell(row: number, col: number): GroupLabel {
+  const subCol = col % 3; // 0, 1, 2 within a panel
+  const isOddRow = row % 2 === 0; // rows 0,2,4 = "odd" display rows 1,3,5
+  const isMiddleCol = subCol === 1;
+
+  if (isMiddleCol) {
+    return isOddRow ? 'C' : 'D';
+  } else {
+    return isOddRow ? 'A' : 'B';
+  }
+}
+
+/**
+ * Build ordered seat positions for each group (top-to-bottom, left-to-right).
+ */
+function buildGroupPositions(rows: number, totalCols: number): Record<GroupLabel, [number, number][]> {
+  const positions: Record<GroupLabel, [number, number][]> = { A: [], B: [], C: [], D: [] };
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < totalCols; c++) {
+      const group = getGroupForCell(r, c);
+      positions[group].push([r, c]);
+    }
+  }
+
+  return positions;
+}
+
+/**
+ * Rank exam codes by student count descending, assign to groups A, B, C, D cyclically.
+ */
+function rankExamCodes(students: StudentRecord[]): { rankings: GroupRanking[]; groupQueues: Record<GroupLabel, StudentRecord[]> } {
+  const countMap: Record<string, StudentRecord[]> = {};
   for (const s of students) {
-    if (!deptMap[s.department]) deptMap[s.department] = [];
-    deptMap[s.department].push(s);
+    if (!countMap[s.examCode]) countMap[s.examCode] = [];
+    countMap[s.examCode].push(s);
   }
 
-  const queues = Object.entries(deptMap)
-    .sort((a, b) => b[1].length - a[1].length)
-    .map(([, list]) => [...list]);
-
-  const result: StudentRecord[] = [];
-  let i = 0;
-
-  while (result.length < students.length) {
-    let added = false;
-    const startI = i;
-
-    do {
-      if (queues[i] && queues[i].length > 0) {
-        result.push(queues[i].shift()!);
-        added = true;
-        i = (i + 1) % queues.length;
-        break;
-      }
-      i = (i + 1) % queues.length;
-    } while (i !== startI);
-
-    if (!added) break;
-  }
-
-  return result;
-}
-
-function buildThreePassOrder(rows: number, mainCols: number, subCols: number) {
-  const oddPositions: [number, number][] = [];
-  const evenPositions: [number, number][] = [];
-  const middlePositions: [number, number][] = [];
-
-  for (let mc = 0; mc < mainCols; mc++) {
-    const s1 = mc * subCols + 0;
-    const s2 = mc * subCols + 1;
-    const s3 = mc * subCols + (subCols - 1);
-
-    // ODD positions = S1 odd rows + S3 even rows (zigzag)
-    for (let row = 0; row < rows; row++) {
-      if (row % 2 === 0) {
-        oddPositions.push([row, s1]);  // S1 rows 0,2,4
-      } else {
-        oddPositions.push([row, s3]);  // S3 rows 1,3
-      }
-    }
-
-    // EVEN positions = S3 odd rows + S1 even rows (mirror zigzag)
-    for (let row = 0; row < rows; row++) {
-      if (row % 2 === 0) {
-        evenPositions.push([row, s3]);  // S3 rows 0,2,4
-      } else {
-        evenPositions.push([row, s1]);  // S1 rows 1,3
-      }
-    }
-
-    // MIDDLE positions = S2 all rows
-    for (let row = 0; row < rows; row++) {
-      middlePositions.push([row, s2]);
-    }
-  }
-
-  return { oddPositions, evenPositions, middlePositions };
-}
-
-function buildThreeQueues(examGroups: Record<string, StudentRecord[]>) {
-  const sorted = Object.entries(examGroups)
-    .filter(([, v]) => v.length > 0)
-    .sort((a, b) => b[1].length - a[1].length);
-
-  const oddQueue: StudentRecord[] = [];
-  const evenQueue: StudentRecord[] = [];
-  const midQueue: StudentRecord[] = [];
-  const oddCodes = new Set<string>();
-  const evenCodes = new Set<string>();
-
-  for (let i = 0; i < sorted.length; i++) {
-    const [code, students] = sorted[i];
-    if (i % 3 === 0) {
-      oddQueue.push(...students);
-      oddCodes.add(code);
-    } else if (i % 3 === 1) {
-      evenQueue.push(...students);
-      evenCodes.add(code);
-    } else {
-      midQueue.push(...students);
-    }
-  }
-
-  return { oddQueue, evenQueue, midQueue, oddCodes, evenCodes };
-}
-
-function buildCheckerboardOrder(rows: number, mainCols: number, subCols: number) {
-  const totalCols = mainCols * subCols;
-  const aPositions: [number, number][] = [];
-  const bPositions: [number, number][] = [];
-
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < totalCols; col++) {
-      if ((row + col) % 2 === 0) {
-        aPositions.push([row, col]);
-      } else {
-        bPositions.push([row, col]);
-      }
-    }
-  }
-
-  return { aPositions, bPositions };
-}
-
-export function decidePattern(
-  examGroups: Record<string, StudentRecord[]>,
-  roomsNeeded: number,
-  mainCols: number,
-  subCols: number,
-  rows: number
-): PatternDecision {
-  const totalSeatsPerRoom = mainCols * subCols * rows;
-  const crissCrossAPerRoom = mainCols * rows;
-  const checkerboardAPerRoom = Math.ceil(totalSeatsPerRoom / 2);
-
-  const crissCrossATotal = roomsNeeded * crissCrossAPerRoom;
-  const checkerboardATotal = roomsNeeded * checkerboardAPerRoom;
-
-  const groupSizes = Object.entries(examGroups)
-    .map(([code, students]) => ({ code, count: students.length }))
-    .sort((a, b) => b.count - a.count);
-
-  if (groupSizes.length === 0) {
-    return { pattern: 'CRISS_CROSS', message: null, violations: 0 };
-  }
-
-  const largest = groupSizes[0];
-
-  if (largest.count <= crissCrossATotal) {
-    return { pattern: 'CRISS_CROSS', message: null, violations: 0 };
-  }
-
-  if (largest.count <= checkerboardATotal) {
-    return {
-      pattern: 'CHECKERBOARD',
-      message: `Pattern auto-switched to Checkerboard because ${largest.code} has ${largest.count.toLocaleString()} students which exceeds Criss Cross capacity of ${crissCrossATotal.toLocaleString()} A seats. Checkerboard provides ${checkerboardATotal.toLocaleString()} A seats.`,
-      violations: 0,
-    };
-  }
-
-  const minRoomsNeeded = Math.ceil(largest.count / checkerboardAPerRoom);
-  const extraRoomsNeeded = minRoomsNeeded - roomsNeeded;
-
-  return {
-    pattern: 'CHECKERBOARD',
-    message: `Warning: ${largest.code} has ${largest.count.toLocaleString()} students. Even Checkerboard cannot fully separate them with ${roomsNeeded} rooms. Need ${minRoomsNeeded} rooms (${extraRoomsNeeded} more).`,
-    violations: 'unavoidable',
-  };
-}
-
-function getNeighborCodes(
-  grid: (StudentRecord | null)[][],
-  row: number,
-  col: number,
-  rows: number,
-  totalCols: number
-): Set<string> {
-  const codes = new Set<string>();
-  const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-  for (const [dr, dc] of dirs) {
-    const nr = row + dr;
-    const nc = col + dc;
-    if (nr >= 0 && nr < rows && nc >= 0 && nc < totalCols && grid[nr][nc]) {
-      codes.add(grid[nr][nc]!.examCode);
-    }
-  }
-  return codes;
-}
-
-function pickBest(pool: StudentRecord[], excludeCodes: Set<string>): StudentRecord | null {
-  const byCode: Record<string, StudentRecord[]> = {};
-  for (const s of pool) {
-    if (!byCode[s.examCode]) byCode[s.examCode] = [];
-    byCode[s.examCode].push(s);
-  }
-
-  const candidates = Object.entries(byCode)
-    .filter(([code]) => !excludeCodes.has(code))
-    .sort((a, b) => b[1].length - a[1].length);
-
-  if (candidates.length > 0) {
-    const bestCode = candidates[0][0];
-    const idx = pool.findIndex(s => s.examCode === bestCode);
-    return pool.splice(idx, 1)[0];
-  }
-
-  if (pool.length > 0) return pool.shift()!;
-  return null;
-}
-
-export function allocateRooms(
-  students: StudentRecord[],
-  config: RoomConfig
-): AllocationResult {
-  const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
-  const totalCols = mainColumns * seatsPerColumn;
-  const rows = Math.ceil(studentsPerRoom / totalCols);
-
-  const examGroups: Record<string, StudentRecord[]> = {};
-  for (const s of students) {
-    if (!examGroups[s.examCode]) examGroups[s.examCode] = [];
-    examGroups[s.examCode].push(s);
-  }
-
-  for (const code of Object.keys(examGroups)) {
-    examGroups[code].sort((a, b) => {
+  // Sort each exam code's students by roll number
+  for (const code of Object.keys(countMap)) {
+    countMap[code].sort((a, b) => {
       const aNum = parseInt(a.rollNumber);
       const bNum = parseInt(b.rollNumber);
       if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
@@ -439,126 +251,57 @@ export function allocateRooms(
     });
   }
 
-  const total = students.length;
-  const roomsNeeded = Math.ceil(total / studentsPerRoom);
+  const sorted = Object.entries(countMap).sort((a, b) => b[1].length - a[1].length);
+  const groupLabels: GroupLabel[] = ['A', 'B', 'C', 'D'];
+  const rankings: GroupRanking[] = [];
+  const groupQueues: Record<GroupLabel, StudentRecord[]> = { A: [], B: [], C: [], D: [] };
 
-  const patternDecision = decidePattern(examGroups, roomsNeeded, mainColumns, seatsPerColumn, rows);
+  for (let i = 0; i < sorted.length; i++) {
+    const [code, studs] = sorted[i];
+    const group = groupLabels[i % 4];
+    rankings.push({
+      rank: i + 1,
+      group,
+      examCode: code,
+      totalStudents: studs.length,
+    });
+    groupQueues[group].push(...studs);
+  }
 
-  const { oddQueue: poolOdd, evenQueue: poolEven, midQueue: poolMid } = buildThreeQueues(examGroups);
+  return { rankings, groupQueues };
+}
 
-  let currentOddCode = poolOdd[0]?.examCode || null;
-  let currentEvenCode = poolEven[0]?.examCode || null;
+export function allocateRooms(
+  students: StudentRecord[],
+  config: RoomConfig
+): AllocationResult {
+  const { mainColumns, seatsPerColumn } = config;
+  const totalCols = mainColumns * seatsPerColumn; // 9
+  const rows = 5; // fixed 5 rows
+  const seatsPerRoom = rows * totalCols; // 45
+
+  const { rankings, groupQueues } = rankExamCodes(students);
+  const roomsNeeded = Math.ceil(students.length / seatsPerRoom);
+  const groupPositions = buildGroupPositions(rows, totalCols);
 
   const rooms: RoomAllocation[] = [];
 
   for (let r = 0; r < roomsNeeded; r++) {
-    const maxSeats = Math.min(studentsPerRoom, total - r * studentsPerRoom);
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
-    let seatedCount = 0;
+    const roomStudents: StudentRecord[] = [];
 
-    if (patternDecision.pattern === 'CHECKERBOARD') {
-      const { aPositions, bPositions } = buildCheckerboardOrder(rows, mainColumns, seatsPerColumn);
-      const allPools = [...poolOdd.splice(0, poolOdd.length), ...poolEven.splice(0, poolEven.length), ...poolMid.splice(0, poolMid.length)];
+    // Fill each group's positions in this room
+    for (const group of ['A', 'B', 'C', 'D'] as GroupLabel[]) {
+      const positions = groupPositions[group];
+      const queue = groupQueues[group];
 
-      for (const [row, col] of aPositions) {
-        if (seatedCount >= maxSeats || allPools.length === 0) break;
-        const nc = getNeighborCodes(grid, row, col, rows, totalCols);
-        const s = pickBest(allPools, nc);
-        if (s) { grid[row][col] = s; seatedCount++; }
-      }
-      for (const [row, col] of bPositions) {
-        if (seatedCount >= maxSeats || allPools.length === 0) break;
-        const nc = getNeighborCodes(grid, row, col, rows, totalCols);
-        const s = pickBest(allPools, nc);
-        if (s) { grid[row][col] = s; seatedCount++; }
-      }
-      poolOdd.push(...allPools);
-    } else {
-      const { oddPositions, evenPositions, middlePositions } = buildThreePassOrder(rows, mainColumns, seatsPerColumn);
-
-      if (poolOdd.length > 0 && !poolOdd.find(s => s.examCode === currentOddCode)) {
-        currentOddCode = poolOdd[0]?.examCode || null;
-      }
-      if (poolEven.length > 0 && !poolEven.find(s => s.examCode === currentEvenCode)) {
-        currentEvenCode = poolEven[0]?.examCode || null;
-      }
-
-      for (const [row, col] of oddPositions) {
-        if (seatedCount >= maxSeats) break;
-        const neighbors = getNeighborCodes(grid, row, col, rows, totalCols);
-
-        if (poolOdd.length > 0) {
-          if (currentOddCode && !neighbors.has(currentOddCode)) {
-            const idx = poolOdd.findIndex(s => s.examCode === currentOddCode);
-            if (idx >= 0) {
-              grid[row][col] = poolOdd.splice(idx, 1)[0];
-              seatedCount++;
-              continue;
-            }
-          }
-          const s = pickBest(poolOdd, neighbors);
-          if (s) { grid[row][col] = s; seatedCount++; continue; }
-        }
-        if (poolEven.length > 0) {
-          const s = pickBest(poolEven, getNeighborCodes(grid, row, col, rows, totalCols));
-          if (s) { grid[row][col] = s; seatedCount++; }
-        }
-      }
-
-      for (const [row, col] of evenPositions) {
-        if (grid[row][col] !== null || seatedCount >= maxSeats) continue;
-        const neighbors = getNeighborCodes(grid, row, col, rows, totalCols);
-        if (currentOddCode) neighbors.add(currentOddCode);
-
-        if (poolEven.length > 0) {
-          if (currentEvenCode && !neighbors.has(currentEvenCode)) {
-            const idx = poolEven.findIndex(s => s.examCode === currentEvenCode);
-            if (idx >= 0) {
-              grid[row][col] = poolEven.splice(idx, 1)[0];
-              seatedCount++;
-              continue;
-            }
-          }
-          const s = pickBest(poolEven, neighbors);
-          if (s) { grid[row][col] = s; seatedCount++; continue; }
-        }
-        if (poolOdd.length > 0) {
-          const s = pickBest(poolOdd, getNeighborCodes(grid, row, col, rows, totalCols));
-          if (s) { grid[row][col] = s; seatedCount++; }
-        }
-      }
-
-      for (const [row, col] of middlePositions) {
-        if (grid[row][col] !== null || seatedCount >= maxSeats) continue;
-
-        const neighbors = getNeighborCodes(grid, row, col, rows, totalCols);
-        if (currentOddCode) neighbors.add(currentOddCode);
-        if (currentEvenCode) neighbors.add(currentEvenCode);
-        if (row > 0 && grid[row - 1][col]) {
-          neighbors.add(grid[row - 1][col]!.examCode);
-        }
-
-        let student: StudentRecord | null = null;
-        if (poolMid.length > 0) {
-          student = pickBest(poolMid, neighbors);
-          if (!student) {
-            const strict = getNeighborCodes(grid, row, col, rows, totalCols);
-            student = pickBest(poolMid, strict);
-          }
-          if (student) { grid[row][col] = student; seatedCount++; continue; }
-        }
-        if (poolEven.length > 0) {
-          student = pickBest(poolEven, getNeighborCodes(grid, row, col, rows, totalCols));
-          if (student) { grid[row][col] = student; seatedCount++; continue; }
-        }
-        if (poolOdd.length > 0) {
-          student = pickBest(poolOdd, getNeighborCodes(grid, row, col, rows, totalCols));
-          if (student) { grid[row][col] = student; seatedCount++; }
-        }
+      for (const [row, col] of positions) {
+        if (queue.length === 0) break;
+        const student = queue.shift()!;
+        grid[row][col] = student;
+        roomStudents.push(student);
       }
     }
-
-    const roomStudents = grid.flat().filter((s): s is StudentRecord => s !== null);
 
     rooms.push({
       roomNumber: r + 1,
@@ -569,5 +312,18 @@ export function allocateRooms(
     });
   }
 
-  return { rooms, patternDecision };
+  // Count violations (adjacent same exam code)
+  let violations = 0;
+  for (const room of rooms) {
+    for (let ri = 0; ri < rows; ri++) {
+      for (let ci = 0; ci < totalCols; ci++) {
+        const cell = room.grid[ri][ci];
+        if (!cell) continue;
+        if (ci + 1 < totalCols && room.grid[ri][ci + 1]?.examCode === cell.examCode) violations++;
+        if (ri + 1 < rows && room.grid[ri + 1]?.[ci]?.examCode === cell.examCode) violations++;
+      }
+    }
+  }
+
+  return { rooms, groupRankings: rankings, violations };
 }
