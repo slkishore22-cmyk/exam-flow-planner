@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { StudentRecord, PdfExtractionResult, getDeptColor, getExamCodeColor } from '@/lib/seating-utils';
+import { StudentRecord, PdfExtractionResult, getExamCodeColor } from '@/lib/seating-utils';
 
 interface VerificationScreenProps {
   students: StudentRecord[];
@@ -102,7 +102,7 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
             </thead>
             <tbody>
               {students.map((s, i) => {
-                const color = getDeptColor(s.department);
+                const color = getExamCodeColor(s.examCode);
                 return (
                   <tr key={s.rollNumber} className="border-t">
                     <td className="p-3">{i + 1}</td>
@@ -138,7 +138,7 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
         <p className="text-sm font-semibold mb-3">Department Summary</p>
         <div className="flex flex-col gap-2">
           {deptSummary.map((entry) => {
-            const color = getDeptColor(entry.dept);
+            const color = getExamCodeColor(entry.examCode);
             return (
               <div key={`${entry.dept}-${entry.examCode}`} className="flex items-center gap-3 text-sm">
                 <span

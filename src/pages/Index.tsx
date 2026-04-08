@@ -9,9 +9,8 @@ import {
   StudentRecord,
   RoomConfig,
   RoomAllocation,
-  PatternDecision,
+  GroupRanking,
   deduplicateStudents,
-  interleaveStudents,
   allocateRooms,
 } from '@/lib/seating-utils';
 
@@ -23,7 +22,8 @@ const Index = () => {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [rooms, setRooms] = useState<RoomAllocation[]>([]);
   const [roomConfig, setRoomConfig] = useState<RoomConfig>({ studentsPerRoom: 45, mainColumns: 3, seatsPerColumn: 3 });
-  const [patternDecision, setPatternDecision] = useState<PatternDecision | null>(null);
+  const [groupRankings, setGroupRankings] = useState<GroupRanking[]>([]);
+  const [violations, setViolations] = useState(0);
 
   const handleUploadComplete = (results: PdfExtractionResult[], files: File[]) => {
     setPdfResults(results);
@@ -43,12 +43,12 @@ const Index = () => {
     setRoomConfig(config);
     const result = allocateRooms([...students], config);
     setRooms(result.rooms);
-    setPatternDecision(result.patternDecision);
+    setGroupRankings(result.groupRankings);
+    setViolations(result.violations);
     setCurrentStep(4);
   };
 
   const handleAddRoom = () => {
-    // Reduce students per room so one more room is created, then regenerate
     const currentRooms = Math.ceil(students.length / roomConfig.studentsPerRoom);
     const newRoomCount = currentRooms + 1;
     const newStudentsPerRoom = Math.ceil(students.length / newRoomCount);
@@ -56,13 +56,12 @@ const Index = () => {
     setRoomConfig(newConfig);
     const result = allocateRooms([...students], newConfig);
     setRooms(result.rooms);
-    setPatternDecision(result.patternDecision);
+    setGroupRankings(result.groupRankings);
+    setViolations(result.violations);
   };
 
   const handleStepClick = (step: number) => {
-    if (step < currentStep) {
-      setCurrentStep(step);
-    }
+    if (step < currentStep) setCurrentStep(step);
   };
 
   return (
@@ -71,33 +70,19 @@ const Index = () => {
         <StepIndicator currentStep={currentStep} onStepClick={handleStepClick} />
       </div>
       <div className="pb-16">
-        {currentStep === 1 && (
-          <UploadScreen
-            onComplete={handleUploadComplete}
-            initialFiles={uploadedFiles}
-          />
-        )}
+        {currentStep === 1 && <UploadScreen onComplete={handleUploadComplete} initialFiles={uploadedFiles} />}
         {currentStep === 2 && (
-          <VerificationScreen
-            students={students}
-            pdfResults={pdfResults}
-            totalPdfs={totalPdfs}
-            onConfirm={handleVerifyConfirm}
-            onBack={() => setCurrentStep(1)}
-          />
+          <VerificationScreen students={students} pdfResults={pdfResults} totalPdfs={totalPdfs} onConfirm={handleVerifyConfirm} onBack={() => setCurrentStep(1)} />
         )}
         {currentStep === 3 && (
-          <RoomConfigScreen
-            totalStudents={students.length}
-            onGenerate={handleGenerate}
-            onBack={() => setCurrentStep(2)}
-          />
+          <RoomConfigScreen totalStudents={students.length} onGenerate={handleGenerate} onBack={() => setCurrentStep(2)} />
         )}
         {currentStep === 4 && (
           <SeatingResultScreen
             rooms={rooms}
             config={roomConfig}
-            patternDecision={patternDecision}
+            groupRankings={groupRankings}
+            violations={violations}
             onBack={() => setCurrentStep(3)}
             onAddRoom={handleAddRoom}
           />
