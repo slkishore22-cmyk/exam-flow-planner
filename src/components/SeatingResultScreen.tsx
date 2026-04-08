@@ -226,7 +226,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
             </tr>
           </thead>
           <tbody>
-            {groupRankings.map(r => {
+            {(groupRankings || []).map(r => {
               const gc = GROUP_COLORS[r.group];
               return (
                 <tr key={r.rank}>
