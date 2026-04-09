@@ -23,6 +23,7 @@ function getGroupForCell(row: number, col: number): 'A' | 'B' | 'C' | 'D' {
 
 const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, groupRankings, violations, onBack, onAddRoom }) => {
   const [activeRoom, setActiveRoom] = useState(0);
+  const [visibleExamCodes, setVisibleExamCodes] = useState<Set<string>>(new Set());
   const printRef = useRef<HTMLDivElement>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
@@ -92,6 +93,32 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     return m;
   }, [groupRankings]);
 
+  // All unique exam codes across all rooms
+  const allExamCodes = useMemo(() => {
+    const codes = new Set<string>();
+    rooms.forEach(r => r.students.forEach(s => codes.add(s.examCode)));
+    return Array.from(codes).sort();
+  }, [rooms]);
+
+  const toggleExamCode = (code: string) => {
+    setVisibleExamCodes(prev => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code); else next.add(code);
+      return next;
+    });
+  };
+
+  const fillAll = () => setVisibleExamCodes(new Set(allExamCodes));
+  const clearAll = () => setVisibleExamCodes(new Set());
+
+  const revealedCount = useMemo(() => {
+    let count = 0;
+    rooms.forEach(r => r.students.forEach(s => { if (visibleExamCodes.has(s.examCode)) count++; }));
+    return count;
+  }, [rooms, visibleExamCodes]);
+
+  const revealPercent = totalStudentsAll > 0 ? Math.round((revealedCount / totalStudentsAll) * 100) : 0;
+
   // Room-level legend: which exam codes are in this room
   const getRoomLegend = (room: RoomAllocation) => {
     const codeSet = new Set(room.students.map(s => s.examCode));
@@ -146,10 +173,20 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 let cellBg: string;
                 let cellBorder: string;
 
+                const isRevealed = student ? visibleExamCodes.has(student.examCode) : false;
+
                 if (!student) {
                   cellBg = '#F5F5F7';
                   cellBorder = '1px solid #E5E5EA';
                   cellContent = null;
+                } else if (!isRevealed) {
+                  // Hidden: show only group label as placeholder
+                  const gc = GROUP_COLORS[group];
+                  cellBg = '#E5E5EA';
+                  cellBorder = '1px solid #D1D1D6';
+                  cellContent = (
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#8E8E93' }}>{group}</span>
+                  );
                 } else {
                   const gc = GROUP_COLORS[group];
                   cellBg = gc.bg;
@@ -294,6 +331,40 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           })}
         </div>
 
+        {/* Reveal status bar */}
+        <div className="mb-4 p-3 bg-secondary rounded-xl">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold">Reveal Exam Codes</span>
+            <div className="flex gap-2">
+              <button onClick={fillAll} className="px-3 py-1 rounded-md text-xs font-medium bg-foreground text-background hover:opacity-80 transition-opacity">Fill All</button>
+              <button onClick={clearAll} className="px-3 py-1 rounded-md text-xs font-medium border border-border bg-background text-foreground hover:bg-secondary transition-colors">Clear</button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {allExamCodes.map(code => {
+              const isActive = visibleExamCodes.has(code);
+              const color = getExamCodeColor(code);
+              return (
+                <button
+                  key={code}
+                  onClick={() => toggleExamCode(code)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border-2 ${isActive ? 'ring-2 ring-ring ring-offset-1' : 'opacity-60 hover:opacity-100'}`}
+                  style={{
+                    backgroundColor: isActive ? color.bg : 'transparent',
+                    color: isActive ? color.text : color.bg,
+                    borderColor: color.bg,
+                  }}
+                >
+                  {code}
+                </button>
+              );
+            })}
+          </div>
+          <div className="w-full bg-border rounded-full h-1.5">
+            <div className="bg-foreground h-1.5 rounded-full transition-all duration-300" style={{ width: `${revealPercent}%` }} />
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">{revealedCount} / {totalStudentsAll} students revealed ({revealPercent}%)</p>
+        </div>
         <div className="overflow-x-auto pb-4">
           {renderRoomGrid(rooms[activeRoom], activeRoom)}
         </div>
