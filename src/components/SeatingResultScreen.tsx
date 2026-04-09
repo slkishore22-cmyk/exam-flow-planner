@@ -173,10 +173,20 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 let cellBg: string;
                 let cellBorder: string;
 
+                const isRevealed = student ? visibleExamCodes.has(student.examCode) : false;
+
                 if (!student) {
                   cellBg = '#F5F5F7';
                   cellBorder = '1px solid #E5E5EA';
                   cellContent = null;
+                } else if (!isRevealed) {
+                  // Hidden: show only group label as placeholder
+                  const gc = GROUP_COLORS[group];
+                  cellBg = '#E5E5EA';
+                  cellBorder = '1px solid #D1D1D6';
+                  cellContent = (
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#8E8E93' }}>{group}</span>
+                  );
                 } else {
                   const gc = GROUP_COLORS[group];
                   cellBg = gc.bg;
