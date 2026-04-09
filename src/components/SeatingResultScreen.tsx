@@ -331,6 +331,40 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           })}
         </div>
 
+        {/* Reveal status bar */}
+        <div className="mb-4 p-3 bg-secondary rounded-xl">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold">Reveal Exam Codes</span>
+            <div className="flex gap-2">
+              <button onClick={fillAll} className="px-3 py-1 rounded-md text-xs font-medium bg-foreground text-background hover:opacity-80 transition-opacity">Fill All</button>
+              <button onClick={clearAll} className="px-3 py-1 rounded-md text-xs font-medium border border-border bg-background text-foreground hover:bg-secondary transition-colors">Clear</button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {allExamCodes.map(code => {
+              const isActive = visibleExamCodes.has(code);
+              const color = getExamCodeColor(code);
+              return (
+                <button
+                  key={code}
+                  onClick={() => toggleExamCode(code)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border-2 ${isActive ? 'ring-2 ring-ring ring-offset-1' : 'opacity-60 hover:opacity-100'}`}
+                  style={{
+                    backgroundColor: isActive ? color.bg : 'transparent',
+                    color: isActive ? color.text : color.bg,
+                    borderColor: color.bg,
+                  }}
+                >
+                  {code}
+                </button>
+              );
+            })}
+          </div>
+          <div className="w-full bg-border rounded-full h-1.5">
+            <div className="bg-foreground h-1.5 rounded-full transition-all duration-300" style={{ width: `${revealPercent}%` }} />
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">{revealedCount} / {totalStudentsAll} students revealed ({revealPercent}%)</p>
+        </div>
         <div className="overflow-x-auto pb-4">
           {renderRoomGrid(rooms[activeRoom], activeRoom)}
         </div>
