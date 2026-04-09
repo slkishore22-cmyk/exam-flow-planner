@@ -23,6 +23,7 @@ function getGroupForCell(row: number, col: number): 'A' | 'B' | 'C' | 'D' {
 
 const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, groupRankings, violations, onBack, onAddRoom }) => {
   const [activeRoom, setActiveRoom] = useState(0);
+  const [visibleExamCodes, setVisibleExamCodes] = useState<Set<string>>(new Set());
   const printRef = useRef<HTMLDivElement>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
