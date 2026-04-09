@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Button } from '@/components/ui/button';
 import { RoomConfig } from '@/lib/seating-utils';
 
@@ -9,13 +9,12 @@ interface RoomConfigScreenProps {
 }
 
 const RoomConfigScreen: React.FC<RoomConfigScreenProps> = ({ totalStudents, onGenerate, onBack }) => {
-  const [studentsPerRoom, setStudentsPerRoom] = useState(45);
-  const [mainColumns, setMainColumns] = useState(3);
-  const [seatsPerColumn, setSeatsPerColumn] = useState(3);
-
+  const studentsPerRoom = 45;
+  const mainColumns = 3;
+  const seatsPerColumn = 3;
   const roomStrength = studentsPerRoom;
   const roomsRequired = Math.ceil(totalStudents / roomStrength);
-  const rows = Math.ceil(roomStrength / (mainColumns * seatsPerColumn));
+  const rows = 5;
 
   return (
     <div className="max-w-lg mx-auto px-4">
@@ -24,21 +23,15 @@ const RoomConfigScreen: React.FC<RoomConfigScreenProps> = ({ totalStudents, onGe
       </Button>
       <h2 className="text-2xl font-bold text-center mb-10">Room Configuration</h2>
 
-      <div className="space-y-8">
+      <div className="grid grid-cols-3 gap-4 mb-8 text-center">
         {[
-          { label: 'Students per Room', value: studentsPerRoom, setter: setStudentsPerRoom, min: 1 },
-          { label: 'Main Columns', value: mainColumns, setter: setMainColumns, min: 1 },
-          { label: 'Seats per Column', value: seatsPerColumn, setter: setSeatsPerColumn, min: 1 },
+          { label: 'Students per Room', value: studentsPerRoom },
+          { label: 'Main Columns', value: mainColumns },
+          { label: 'Seats per Column', value: seatsPerColumn },
         ].map(field => (
-          <div key={field.label} className="text-center">
-            <label className="block text-lg font-medium mb-3">{field.label}</label>
-            <input
-              type="number"
-              min={field.min}
-              value={field.value}
-              onChange={e => field.setter(Math.max(field.min, parseInt(e.target.value) || field.min))}
-              className="w-32 text-center text-2xl font-semibold border-2 rounded-xl px-4 py-3 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+          <div key={field.label} className="bg-secondary rounded-2xl p-5">
+            <p className="text-2xl font-bold">{field.value}</p>
+            <p className="text-xs text-muted-foreground mt-1">{field.label}</p>
           </div>
         ))}
       </div>
@@ -83,11 +76,14 @@ const RoomConfigScreen: React.FC<RoomConfigScreenProps> = ({ totalStudents, onGe
             </div>
           ))}
         </div>
+        <p className="text-xs text-muted-foreground text-center mt-4">
+          Fixed pattern: A/C/B on rows 1, 3, 5 and B/D/A on rows 2, 4.
+        </p>
       </div>
 
       <div className="mt-10 text-center">
         <Button
-          onClick={() => onGenerate({ studentsPerRoom, mainColumns, seatsPerColumn })}
+          onClick={() => onGenerate({ studentsPerRoom, mainColumns, seatsPerColumn, requestedRoomCount: Math.max(1, roomsRequired) })}
           className="px-12 h-12 text-base rounded-xl"
         >
           Generate Seating
