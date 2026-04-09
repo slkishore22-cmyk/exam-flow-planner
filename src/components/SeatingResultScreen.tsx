@@ -16,16 +16,9 @@ const GROUP_LABELS = ['A', 'B', 'C', 'D'] as const;
 function getGroupForCell(row: number, col: number): 'A' | 'B' | 'C' | 'D' {
   const subCol = col % 3;
   const isOddRow = row % 2 === 0;
-
-  if (isOddRow) {
-    if (subCol === 0) return 'A';
-    if (subCol === 1) return 'C';
-    return 'B';
-  }
-
-  if (subCol === 0) return 'B';
-  if (subCol === 1) return 'D';
-  return 'A';
+  const isMiddleCol = subCol === 1;
+  if (isMiddleCol) return isOddRow ? 'C' : 'D';
+  return isOddRow ? 'A' : 'B';
 }
 
 const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, groupRankings, violations, onBack, onAddRoom }) => {
@@ -56,15 +49,6 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     return () => window.removeEventListener('keydown', handler);
   }, [goNext, goPrev, goFirst, goLast]);
 
-  useEffect(() => {
-    if (rooms.length === 0) {
-      setActiveRoom(0);
-      return;
-    }
-
-    setActiveRoom(prev => Math.min(prev, rooms.length - 1));
-  }, [rooms.length]);
-
   const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
@@ -78,17 +62,16 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     return rooms.map(room => {
       const violatedCells = new Set<string>();
       let count = 0;
-      const grid = room?.grid ?? [];
-      const totalRows = grid.length;
-      const totalCols = grid[0]?.length || 0;
+      const totalRows = room.grid.length;
+      const totalCols = room.grid[0]?.length || 0;
       for (let ri = 0; ri < totalRows; ri++) {
         for (let ci = 0; ci < totalCols; ci++) {
-          const cell = grid[ri]?.[ci];
+          const cell = room.grid[ri][ci];
           if (!cell) continue;
           const dirs: [number, number][] = [[0, 1], [1, 0]];
           for (const [dr, dc] of dirs) {
             const nr = ri + dr, nc = ci + dc;
-            if (nr < totalRows && nc < totalCols && grid[nr]?.[nc]?.examCode === cell.examCode) {
+            if (nr < totalRows && nc < totalCols && room.grid[nr][nc]?.examCode === cell.examCode) {
               violatedCells.add(`${ri}-${ci}`);
               violatedCells.add(`${nr}-${nc}`);
               count++;
@@ -111,11 +94,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
 
   // Room-level legend: which exam codes are in this room
   const getRoomLegend = (room: RoomAllocation) => {
-    if (!room) {
-      return { A: [], B: [], C: [], D: [] };
-    }
-
-    const codeSet = new Set((room.students || []).map(s => s.examCode));
+    const codeSet = new Set(room.students.map(s => s.examCode));
     const legend: Record<string, string[]> = { A: [], B: [], C: [], D: [] };
     (groupRankings || []).forEach(r => {
       if (codeSet.has(r.examCode)) {
@@ -132,13 +111,8 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const handlePrint = () => window.print();
   const totalViolations = roomViolations.reduce((sum, v) => sum + v.count, 0);
   const activeViolations = roomViolations[activeRoom]?.count || 0;
-  const currentRoom = rooms[activeRoom] ?? rooms[rooms.length - 1];
 
   const renderRoomGrid = (room: RoomAllocation, roomIndex: number) => {
-    if (!room || !Array.isArray(room.grid)) {
-      return null;
-    }
-
     const viol = roomViolations[roomIndex];
     return (
       <table className="border-collapse mx-auto" style={{ borderSpacing: 0 }}>
@@ -159,7 +133,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         <tbody>
           {room.grid.map((row, rowIdx) => (
             <tr key={rowIdx}>
-              {(row || []).map((student, colIdx) => {
+              {row.map((student, colIdx) => {
                 const mc = Math.floor(colIdx / config.seatsPerColumn);
                 const sc = colIdx % config.seatsPerColumn;
                 const isLastSubCol = sc === config.seatsPerColumn - 1;
@@ -214,7 +188,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     );
   };
 
-  const currentRoomLegend = getRoomLegend(currentRoom);
+  const currentRoomLegend = getRoomLegend(rooms[activeRoom]);
 
   return (
     <div className="max-w-6xl mx-auto px-4">
@@ -275,7 +249,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       {/* Room tabs */}
       <div className="no-print flex flex-wrap gap-2 mb-6 justify-center">
         {rooms.map((room, i) => {
-          const hasViolation = (roomViolations[i]?.count || 0) > 0;
+          const hasViolation = roomViolations[i].count > 0;
           return (
             <button key={i} onClick={() => setActiveRoom(i)}
               className={`px-5 py-2 rounded-lg text-sm font-medium transition-all border ${
@@ -295,8 +269,8 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         <div className="flex items-center justify-between mb-4">
           <Button variant="outline" size="sm" onClick={goPrev} disabled={activeRoom === 0} className="text-xs rounded-md px-3">← Prev</Button>
           <h3 className="text-xl font-bold text-center">
-            Room {currentRoom.roomNumber}
-            <span className="text-sm font-normal text-muted-foreground ml-2">({currentRoom.students.length} students)</span>
+            Room {rooms[activeRoom].roomNumber}
+            <span className="text-sm font-normal text-muted-foreground ml-2">({rooms[activeRoom].students.length} students)</span>
             {activeViolations > 0 && (
               <span className="text-sm font-semibold ml-2" style={{ color: '#EF4444' }}>— {activeViolations} violation{activeViolations !== 1 ? 's' : ''}</span>
             )}
@@ -321,7 +295,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         </div>
 
         <div className="overflow-x-auto pb-4">
-          {renderRoomGrid(currentRoom, activeRoom)}
+          {renderRoomGrid(rooms[activeRoom], activeRoom)}
         </div>
 
         <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-3 text-[10px] text-muted-foreground">

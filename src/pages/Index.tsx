@@ -14,12 +14,6 @@ import {
   allocateRooms,
 } from '@/lib/seating-utils';
 
-const FIXED_ROOM_CONFIG: RoomConfig = {
-  studentsPerRoom: 45,
-  mainColumns: 3,
-  seatsPerColumn: 3,
-};
-
 const Index = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [pdfResults, setPdfResults] = useState<PdfExtractionResult[]>([]);
@@ -27,7 +21,7 @@ const Index = () => {
   const [totalPdfs, setTotalPdfs] = useState(0);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [rooms, setRooms] = useState<RoomAllocation[]>([]);
-  const [roomConfig, setRoomConfig] = useState<RoomConfig>(FIXED_ROOM_CONFIG);
+  const [roomConfig, setRoomConfig] = useState<RoomConfig>({ studentsPerRoom: 45, mainColumns: 3, seatsPerColumn: 3 });
   const [groupRankings, setGroupRankings] = useState<GroupRanking[]>([]);
   const [violations, setViolations] = useState(0);
 
@@ -46,13 +40,8 @@ const Index = () => {
   };
 
   const handleGenerate = (config: RoomConfig) => {
-    const normalizedConfig: RoomConfig = {
-      ...FIXED_ROOM_CONFIG,
-      requestedRoomCount: config.requestedRoomCount ?? Math.max(1, Math.ceil(students.length / FIXED_ROOM_CONFIG.studentsPerRoom)),
-    };
-
-    setRoomConfig(normalizedConfig);
-    const result = allocateRooms([...students], normalizedConfig);
+    setRoomConfig(config);
+    const result = allocateRooms([...students], config);
     setRooms(result.rooms);
     setGroupRankings(result.groupRankings);
     setViolations(result.violations);
@@ -60,11 +49,10 @@ const Index = () => {
   };
 
   const handleAddRoom = () => {
-    const newConfig: RoomConfig = {
-      ...FIXED_ROOM_CONFIG,
-      requestedRoomCount: Math.max(rooms.length + 1, (roomConfig.requestedRoomCount ?? 0) + 1),
-    };
-
+    const currentRooms = Math.ceil(students.length / roomConfig.studentsPerRoom);
+    const newRoomCount = currentRooms + 1;
+    const newStudentsPerRoom = Math.ceil(students.length / newRoomCount);
+    const newConfig = { ...roomConfig, studentsPerRoom: newStudentsPerRoom };
     setRoomConfig(newConfig);
     const result = allocateRooms([...students], newConfig);
     setRooms(result.rooms);

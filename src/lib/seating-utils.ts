@@ -1,5 +1,3 @@
-import { allocateRooms as allocateRoomsInternal } from './seating-allocation';
-
 declare const pdfjsLib: any;
 
 export interface StudentRecord {
@@ -20,7 +18,6 @@ export interface RoomConfig {
   studentsPerRoom: number;
   mainColumns: number;
   seatsPerColumn: number;
-  requestedRoomCount?: number;
 }
 
 export interface RoomAllocation {
@@ -191,9 +188,202 @@ export function deduplicateStudents(
   return students;
 }
 
+// ── NEW Seating Algorithm ──
+
+type GroupLabel = 'A' | 'B' | 'C' | 'D';
+
+/**
+ * For a 5×9 grid (3 panels × 3 sub-cols), returns the group label for each cell.
+ * 
+ * Pattern per panel:
+ *   Col:  1  2  3
+ *   R1:   A  C  A
+ *   R2:   B  D  B
+ *   R3:   A  C  A
+ *   R4:   B  D  B
+ *   R5:   A  C  A
+ */
+function getGroupForCell(row: number, col: number): GroupLabel {
+  const subCol = col % 3; // 0, 1, 2 within a panel
+  const isOddDisplayRow = row % 2 === 0; // rows 0,2,4
+
+  if (isOddDisplayRow) {
+    // A C B pattern
+    if (subCol === 0) return 'A';
+    if (subCol === 1) return 'C';
+    return 'B';
+  } else {
+    // B D A pattern
+    if (subCol === 0) return 'B';
+    if (subCol === 1) return 'D';
+    return 'A';
+  }
+}
+
+/**
+ * Build ordered seat positions for each group (top-to-bottom, left-to-right).
+ */
+function buildGroupPositions(rows: number, totalCols: number): Record<GroupLabel, [number, number][]> {
+  const positions: Record<GroupLabel, [number, number][]> = { A: [], B: [], C: [], D: [] };
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < totalCols; c++) {
+      const group = getGroupForCell(r, c);
+      positions[group].push([r, c]);
+    }
+  }
+
+  return positions;
+}
+
+/**
+ * Group capacities per room: A=15, B=15, C=9, D=6. Total=45.
+ */
+const GROUP_CAPACITY: Record<GroupLabel, number> = { A: 15, B: 15, C: 9, D: 6 };
+
+/**
+ * Rank exam codes by student count descending.
+ * Smart splitting: if an exam code is too large for one group across all rooms,
+ * it gets split across multiple groups (e.g., C and D, or A and B).
+ */
+function rankAndAssignGroups(
+  students: StudentRecord[],
+  roomCount: number
+): { rankings: GroupRanking[]; groupQueues: Record<GroupLabel, StudentRecord[]> } {
+  // Count students per exam code
+  const countMap: Record<string, StudentRecord[]> = {};
+  for (const s of students) {
+    if (!countMap[s.examCode]) countMap[s.examCode] = [];
+    countMap[s.examCode].push(s);
+  }
+
+  // Sort each exam code's students by roll number
+  for (const code of Object.keys(countMap)) {
+    countMap[code].sort((a, b) => {
+      const aNum = parseInt(a.rollNumber);
+      const bNum = parseInt(b.rollNumber);
+      if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+      return a.rollNumber.localeCompare(b.rollNumber);
+    });
+  }
+
+  // Sort exam codes by student count descending
+  const sorted = Object.entries(countMap).sort((a, b) => b[1].length - a[1].length);
+  const groupLabels: GroupLabel[] = ['A', 'B', 'C', 'D'];
+  const rankings: GroupRanking[] = [];
+  const groupQueues: Record<GroupLabel, StudentRecord[]> = { A: [], B: [], C: [], D: [] };
+
+  // Track remaining capacity per group across all rooms
+  const groupRemaining: Record<GroupLabel, number> = {
+    A: GROUP_CAPACITY.A * roomCount,
+    B: GROUP_CAPACITY.B * roomCount,
+    C: GROUP_CAPACITY.C * roomCount,
+    D: GROUP_CAPACITY.D * roomCount,
+  };
+
+  let rankCounter = 1;
+
+  for (const [code, studs] of sorted) {
+    let remaining = [...studs];
+
+    // Try to fit into a single group first (cyclic assignment)
+    const preferredGroup = groupLabels[(rankCounter - 1) % 4];
+
+    if (remaining.length <= groupRemaining[preferredGroup]) {
+      // Fits in one group
+      groupQueues[preferredGroup].push(...remaining);
+      groupRemaining[preferredGroup] -= remaining.length;
+      rankings.push({
+        rank: rankCounter,
+        group: preferredGroup,
+        examCode: code,
+        totalStudents: studs.length,
+      });
+      rankCounter++;
+    } else {
+      // Too large — split across groups, starting with preferred
+      // Priority: fill preferred group first, then spill into others
+      const groupOrder = [
+        preferredGroup,
+        ...groupLabels.filter(g => g !== preferredGroup),
+      ];
+
+      for (const group of groupOrder) {
+        if (remaining.length === 0) break;
+        const canTake = Math.min(remaining.length, groupRemaining[group]);
+        if (canTake === 0) continue;
+
+        const chunk = remaining.splice(0, canTake);
+        groupQueues[group].push(...chunk);
+        groupRemaining[group] -= canTake;
+
+        rankings.push({
+          rank: rankCounter,
+          group,
+          examCode: code,
+          totalStudents: chunk.length,
+        });
+        rankCounter++;
+      }
+    }
+  }
+
+  return { rankings, groupQueues };
+}
+
 export function allocateRooms(
   students: StudentRecord[],
   config: RoomConfig
 ): AllocationResult {
-  return allocateRoomsInternal(students, config);
+  const { mainColumns, seatsPerColumn } = config;
+  const totalCols = mainColumns * seatsPerColumn; // 9
+  const rows = 5; // fixed 5 rows
+  const seatsPerRoom = rows * totalCols; // 45
+
+  const roomsNeeded = Math.ceil(students.length / seatsPerRoom);
+  const { rankings, groupQueues } = rankAndAssignGroups(students, roomsNeeded);
+  const groupPositions = buildGroupPositions(rows, totalCols);
+
+  const rooms: RoomAllocation[] = [];
+
+  for (let r = 0; r < roomsNeeded; r++) {
+    const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
+    const roomStudents: StudentRecord[] = [];
+
+    // Fill each group's positions in this room
+    for (const group of ['A', 'B', 'C', 'D'] as GroupLabel[]) {
+      const positions = groupPositions[group];
+      const queue = groupQueues[group];
+
+      for (const [row, col] of positions) {
+        if (queue.length === 0) break;
+        const student = queue.shift()!;
+        grid[row][col] = student;
+        roomStudents.push(student);
+      }
+    }
+
+    rooms.push({
+      roomNumber: r + 1,
+      students: roomStudents,
+      grid,
+      totalRows: rows,
+      seatsPerRow: totalCols,
+    });
+  }
+
+  // Count violations (adjacent same exam code)
+  let violations = 0;
+  for (const room of rooms) {
+    for (let ri = 0; ri < rows; ri++) {
+      for (let ci = 0; ci < totalCols; ci++) {
+        const cell = room.grid[ri][ci];
+        if (!cell) continue;
+        if (ci + 1 < totalCols && room.grid[ri][ci + 1]?.examCode === cell.examCode) violations++;
+        if (ri + 1 < rows && room.grid[ri + 1]?.[ci]?.examCode === cell.examCode) violations++;
+      }
+    }
+  }
+
+  return { rooms, groupRankings: rankings, violations };
 }
