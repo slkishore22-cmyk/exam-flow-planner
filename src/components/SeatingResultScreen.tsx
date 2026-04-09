@@ -93,6 +93,32 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     return m;
   }, [groupRankings]);
 
+  // All unique exam codes across all rooms
+  const allExamCodes = useMemo(() => {
+    const codes = new Set<string>();
+    rooms.forEach(r => r.students.forEach(s => codes.add(s.examCode)));
+    return Array.from(codes).sort();
+  }, [rooms]);
+
+  const toggleExamCode = (code: string) => {
+    setVisibleExamCodes(prev => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code); else next.add(code);
+      return next;
+    });
+  };
+
+  const fillAll = () => setVisibleExamCodes(new Set(allExamCodes));
+  const clearAll = () => setVisibleExamCodes(new Set());
+
+  const revealedCount = useMemo(() => {
+    let count = 0;
+    rooms.forEach(r => r.students.forEach(s => { if (visibleExamCodes.has(s.examCode)) count++; }));
+    return count;
+  }, [rooms, visibleExamCodes]);
+
+  const revealPercent = totalStudentsAll > 0 ? Math.round((revealedCount / totalStudentsAll) * 100) : 0;
+
   // Room-level legend: which exam codes are in this room
   const getRoomLegend = (room: RoomAllocation) => {
     const codeSet = new Set(room.students.map(s => s.examCode));
