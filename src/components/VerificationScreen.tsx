@@ -19,7 +19,6 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
 }) => {
   const [students, setStudents] = useState<StudentRecord[]>(initialStudents);
   const [newRoll, setNewRoll] = useState('');
-  const [selectedExamCode, setSelectedExamCode] = useState<string | null>(null);
 
   const totalRollNumbers = useMemo(
     () => pdfResults.reduce((sum, r) => sum + r.extractedCount, 0),
@@ -46,26 +45,13 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
     const rn = newRoll.trim().toUpperCase();
     if (!rn) return;
     if (students.some(s => s.rollNumber === rn)) return;
-
-    // Use selected exam code if available, otherwise UNKNOWN
-    const dept = selectedExamCode
-      ? (deptSummary.find(d => d.examCode === selectedExamCode)?.dept || 'UNKNOWN')
-      : 'UNKNOWN';
-    const examCode = selectedExamCode || 'UNKNOWN';
-
-    setStudents(prev => [...prev, { rollNumber: rn, department: dept, examCode, sourcePdf: 'Manual' }]);
+    setStudents(prev => [...prev, { rollNumber: rn, department: 'UNKNOWN', examCode: 'UNKNOWN', sourcePdf: 'Manual' }]);
     setNewRoll('');
   };
 
   const handleDelete = (rollNumber: string) => {
     setStudents(prev => prev.filter(s => s.rollNumber !== rollNumber));
   };
-
-  // Get unique exam codes for click-to-fill
-  const uniqueExamCodes = useMemo(() => {
-    const codes = new Set(students.map(s => s.examCode));
-    return Array.from(codes).filter(c => c !== 'UNKNOWN').sort();
-  }, [students]);
 
   return (
     <div className="max-w-5xl mx-auto px-4">
@@ -168,53 +154,11 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
         </div>
       </div>
 
-      {/* Click-to-fill exam code selector */}
-      {uniqueExamCodes.length > 0 && (
-        <div className="mb-4">
-          <p className="text-sm font-semibold mb-2">Select Exam Code for Manual Entry</p>
-          <div className="flex flex-wrap gap-2">
-            {uniqueExamCodes.map(code => {
-              const color = getExamCodeColor(code);
-              const isSelected = selectedExamCode === code;
-              return (
-                <button
-                  key={code}
-                  onClick={() => setSelectedExamCode(isSelected ? null : code)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border-2 ${
-                    isSelected ? 'ring-2 ring-ring ring-offset-2' : ''
-                  }`}
-                  style={{
-                    backgroundColor: isSelected ? color.bg : 'transparent',
-                    color: isSelected ? color.text : color.bg,
-                    borderColor: color.bg,
-                  }}
-                >
-                  {code}
-                </button>
-              );
-            })}
-            {selectedExamCode && (
-              <button
-                onClick={() => setSelectedExamCode(null)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground border border-border hover:bg-secondary"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          {selectedExamCode && (
-            <p className="text-xs text-muted-foreground mt-1">
-              New roll numbers will be added under <strong>{selectedExamCode}</strong>
-            </p>
-          )}
-        </div>
-      )}
-
       {/* Add roll number */}
       <div className="flex gap-2 mb-8">
         <input
           type="text"
-          placeholder={selectedExamCode ? `Add roll number for ${selectedExamCode}` : "Add a roll number manually"}
+          placeholder="Add a roll number manually"
           value={newRoll}
           onChange={e => setNewRoll(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleAdd()}

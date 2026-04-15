@@ -237,20 +237,9 @@ function buildGroupPositions(rows: number, totalCols: number): Record<GroupLabel
 }
 
 /**
- * Group capacities per room: A=15, B=15, C=9, D=6. Total=45.
+ * Rank exam codes by student count descending, assign to groups A, B, C, D cyclically.
  */
-const GROUP_CAPACITY: Record<GroupLabel, number> = { A: 15, B: 15, C: 9, D: 6 };
-
-/**
- * Rank exam codes by student count descending.
- * Smart splitting: if an exam code is too large for one group across all rooms,
- * it gets split across multiple groups (e.g., C and D, or A and B).
- */
-function rankAndAssignGroups(
-  students: StudentRecord[],
-  roomCount: number
-): { rankings: GroupRanking[]; groupQueues: Record<GroupLabel, StudentRecord[]> } {
-  // Count students per exam code
+function rankExamCodes(students: StudentRecord[]): { rankings: GroupRanking[]; groupQueues: Record<GroupLabel, StudentRecord[]> } {
   const countMap: Record<string, StudentRecord[]> = {};
   for (const s of students) {
     if (!countMap[s.examCode]) countMap[s.examCode] = [];
@@ -267,65 +256,21 @@ function rankAndAssignGroups(
     });
   }
 
-  // Sort exam codes by student count descending
   const sorted = Object.entries(countMap).sort((a, b) => b[1].length - a[1].length);
   const groupLabels: GroupLabel[] = ['A', 'B', 'C', 'D'];
   const rankings: GroupRanking[] = [];
   const groupQueues: Record<GroupLabel, StudentRecord[]> = { A: [], B: [], C: [], D: [] };
 
-  // Track remaining capacity per group across all rooms
-  const groupRemaining: Record<GroupLabel, number> = {
-    A: GROUP_CAPACITY.A * roomCount,
-    B: GROUP_CAPACITY.B * roomCount,
-    C: GROUP_CAPACITY.C * roomCount,
-    D: GROUP_CAPACITY.D * roomCount,
-  };
-
-  let rankCounter = 1;
-
-  for (const [code, studs] of sorted) {
-    let remaining = [...studs];
-
-    // Try to fit into a single group first (cyclic assignment)
-    const preferredGroup = groupLabels[(rankCounter - 1) % 4];
-
-    if (remaining.length <= groupRemaining[preferredGroup]) {
-      // Fits in one group
-      groupQueues[preferredGroup].push(...remaining);
-      groupRemaining[preferredGroup] -= remaining.length;
-      rankings.push({
-        rank: rankCounter,
-        group: preferredGroup,
-        examCode: code,
-        totalStudents: studs.length,
-      });
-      rankCounter++;
-    } else {
-      // Too large — split across groups, starting with preferred
-      // Priority: fill preferred group first, then spill into others
-      const groupOrder = [
-        preferredGroup,
-        ...groupLabels.filter(g => g !== preferredGroup),
-      ];
-
-      for (const group of groupOrder) {
-        if (remaining.length === 0) break;
-        const canTake = Math.min(remaining.length, groupRemaining[group]);
-        if (canTake === 0) continue;
-
-        const chunk = remaining.splice(0, canTake);
-        groupQueues[group].push(...chunk);
-        groupRemaining[group] -= canTake;
-
-        rankings.push({
-          rank: rankCounter,
-          group,
-          examCode: code,
-          totalStudents: chunk.length,
-        });
-        rankCounter++;
-      }
-    }
+  for (let i = 0; i < sorted.length; i++) {
+    const [code, studs] = sorted[i];
+    const group = groupLabels[i % 4];
+    rankings.push({
+      rank: i + 1,
+      group,
+      examCode: code,
+      totalStudents: studs.length,
+    });
+    groupQueues[group].push(...studs);
   }
 
   return { rankings, groupQueues };
@@ -340,8 +285,8 @@ export function allocateRooms(
   const rows = 5; // fixed 5 rows
   const seatsPerRoom = rows * totalCols; // 45
 
+  const { rankings, groupQueues } = rankExamCodes(students);
   const roomsNeeded = Math.ceil(students.length / seatsPerRoom);
-  const { rankings, groupQueues } = rankAndAssignGroups(students, roomsNeeded);
   const groupPositions = buildGroupPositions(rows, totalCols);
 
   const rooms: RoomAllocation[] = [];
