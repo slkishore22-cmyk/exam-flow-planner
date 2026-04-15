@@ -367,18 +367,28 @@ export function allocateRooms(
     for (const lane of middleLanes) {
       const targetGroup = getLaneGroupForRoom(lane.startGroup, roomIndex);
 
-      if (!lane.currentBucket && nextMiddleBucketIndex < middleBuckets.length) {
-        lane.currentBucket = middleBuckets[nextMiddleBucketIndex++];
-        lane.currentBucket.initialGroup = targetGroup;
+      // Build a temporary queue for this lane's group in this room
+      // by pulling from current bucket and subsequent buckets as needed
+      const laneQueue: StudentRecord[] = [];
+      const capacity = groupPositions[targetGroup].length;
+
+      while (laneQueue.length < capacity) {
+        if (!lane.currentBucket && nextMiddleBucketIndex < middleBuckets.length) {
+          lane.currentBucket = middleBuckets[nextMiddleBucketIndex++];
+          lane.currentBucket.initialGroup = targetGroup;
+        }
+        if (!lane.currentBucket) break;
+
+        const needed = capacity - laneQueue.length;
+        const batch = lane.currentBucket.students.splice(0, needed);
+        laneQueue.push(...batch);
+
+        if (lane.currentBucket.students.length === 0) {
+          lane.currentBucket = null;
+        }
       }
 
-      if (!lane.currentBucket) continue;
-
-      fillGroupPositions(groupPositions[targetGroup], lane.currentBucket.students, grid, roomStudents);
-
-      if (lane.currentBucket.students.length === 0) {
-        lane.currentBucket = null;
-      }
+      fillGroupPositions(groupPositions[targetGroup], laneQueue, grid, roomStudents);
     }
 
     rooms.push({
