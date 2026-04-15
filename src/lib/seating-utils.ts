@@ -191,6 +191,20 @@ export function deduplicateStudents(
 // ── NEW Seating Algorithm ──
 
 type GroupLabel = 'A' | 'B' | 'C' | 'D';
+type MiddleGroupLabel = 'C' | 'D';
+
+interface MiddleExamBucket {
+  rank: number;
+  examCode: string;
+  totalStudents: number;
+  students: StudentRecord[];
+  initialGroup: MiddleGroupLabel | null;
+}
+
+interface MiddleLaneState {
+  startGroup: MiddleGroupLabel;
+  currentBucket: MiddleExamBucket | null;
+}
 
 /**
  * For a 5×9 grid (3 panels × 3 sub-cols), returns the group label for each cell.
@@ -236,14 +250,36 @@ function buildGroupPositions(rows: number, totalCols: number): Record<GroupLabel
   return positions;
 }
 
+function fillGroupPositions(
+  positions: [number, number][],
+  source: StudentRecord[],
+  grid: (StudentRecord | null)[][],
+  roomStudents: StudentRecord[]
+) {
+  for (const [row, col] of positions) {
+    if (source.length === 0) break;
+    const student = source.shift()!;
+    grid[row][col] = student;
+    roomStudents.push(student);
+  }
+}
+
+function getAlternateMiddleGroup(group: MiddleGroupLabel): MiddleGroupLabel {
+  return group === 'C' ? 'D' : 'C';
+}
+
+function getLaneGroupForRoom(startGroup: MiddleGroupLabel, roomIndex: number): MiddleGroupLabel {
+  return roomIndex % 2 === 0 ? startGroup : getAlternateMiddleGroup(startGroup);
+}
+
 /**
- * Rank exam codes by student count descending. A=largest, B=2nd, Middle(C+D)=rest.
+ * Rank exam codes by student count descending. A=largest, B=2nd, middle exam codes alternate C/D across rooms.
  */
 function rankExamCodes(students: StudentRecord[]): {
   rankings: GroupRanking[];
   queueA: StudentRecord[];
   queueB: StudentRecord[];
-  queueMiddle: StudentRecord[];
+  middleBuckets: MiddleExamBucket[];
 } {
   const countMap: Record<string, StudentRecord[]> = {};
   for (const s of students) {
@@ -264,30 +300,38 @@ function rankExamCodes(students: StudentRecord[]): {
   const rankings: GroupRanking[] = [];
   const queueA: StudentRecord[] = [];
   const queueB: StudentRecord[] = [];
-  const queueMiddle: StudentRecord[] = [];
+  const middleBuckets: MiddleExamBucket[] = [];
 
   for (let i = 0; i < sorted.length; i++) {
     const [code, studs] = sorted[i];
-    let group: GroupLabel;
     if (i === 0) {
-      group = 'A';
       queueA.push(...studs);
+      rankings.push({
+        rank: i + 1,
+        group: 'A',
+        examCode: code,
+        totalStudents: studs.length,
+      });
     } else if (i === 1) {
-      group = 'B';
       queueB.push(...studs);
+      rankings.push({
+        rank: i + 1,
+        group: 'B',
+        examCode: code,
+        totalStudents: studs.length,
+      });
     } else {
-      group = i % 2 === 0 ? 'D' : 'C';
-      queueMiddle.push(...studs);
+      middleBuckets.push({
+        rank: i + 1,
+        examCode: code,
+        totalStudents: studs.length,
+        students: [...studs],
+        initialGroup: null,
+      });
     }
-    rankings.push({
-      rank: i + 1,
-      group,
-      examCode: code,
-      totalStudents: studs.length,
-    });
   }
 
-  return { rankings, queueA, queueB, queueMiddle };
+  return { rankings, queueA, queueB, middleBuckets };
 }
 
 export function allocateRooms(
@@ -297,57 +341,63 @@ export function allocateRooms(
   const { mainColumns, seatsPerColumn } = config;
   const totalCols = mainColumns * seatsPerColumn;
   const rows = 5;
-  const seatsPerRoom = rows * totalCols;
 
-  const { rankings, queueA, queueB, queueMiddle } = rankExamCodes(students);
-  const roomsNeeded = Math.ceil(students.length / seatsPerRoom);
+  const { rankings: topRankings, queueA, queueB, middleBuckets } = rankExamCodes(students);
   const groupPositions = buildGroupPositions(rows, totalCols);
+  const middleLanes: MiddleLaneState[] = [
+    { startGroup: 'D', currentBucket: null },
+    { startGroup: 'C', currentBucket: null },
+  ];
 
   const rooms: RoomAllocation[] = [];
+  let nextMiddleBucketIndex = 0;
+  let roomIndex = 0;
 
-  for (let r = 0; r < roomsNeeded; r++) {
+  const hasPendingMiddleStudents = () =>
+    nextMiddleBucketIndex < middleBuckets.length ||
+    middleLanes.some((lane) => lane.currentBucket !== null);
+
+  while (queueA.length > 0 || queueB.length > 0 || hasPendingMiddleStudents()) {
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     const roomStudents: StudentRecord[] = [];
 
-    // Fill A positions
-    for (const [row, col] of groupPositions['A']) {
-      if (queueA.length === 0) break;
-      const student = queueA.shift()!;
-      grid[row][col] = student;
-      roomStudents.push(student);
-    }
+    fillGroupPositions(groupPositions['A'], queueA, grid, roomStudents);
+    fillGroupPositions(groupPositions['B'], queueB, grid, roomStudents);
 
-    // Fill B positions
-    for (const [row, col] of groupPositions['B']) {
-      if (queueB.length === 0) break;
-      const student = queueB.shift()!;
-      grid[row][col] = student;
-      roomStudents.push(student);
-    }
+    for (const lane of middleLanes) {
+      const targetGroup = getLaneGroupForRoom(lane.startGroup, roomIndex);
 
-    // Fill middle: D first then C, from ONE shared queue
-    // So an exam code flows from D in room 1 → C in room 2 continuously
-    for (const [row, col] of groupPositions['D']) {
-      if (queueMiddle.length === 0) break;
-      const student = queueMiddle.shift()!;
-      grid[row][col] = student;
-      roomStudents.push(student);
-    }
-    for (const [row, col] of groupPositions['C']) {
-      if (queueMiddle.length === 0) break;
-      const student = queueMiddle.shift()!;
-      grid[row][col] = student;
-      roomStudents.push(student);
+      if (!lane.currentBucket && nextMiddleBucketIndex < middleBuckets.length) {
+        lane.currentBucket = middleBuckets[nextMiddleBucketIndex++];
+        lane.currentBucket.initialGroup = targetGroup;
+      }
+
+      if (!lane.currentBucket) continue;
+
+      fillGroupPositions(groupPositions[targetGroup], lane.currentBucket.students, grid, roomStudents);
+
+      if (lane.currentBucket.students.length === 0) {
+        lane.currentBucket = null;
+      }
     }
 
     rooms.push({
-      roomNumber: r + 1,
+      roomNumber: roomIndex + 1,
       students: roomStudents,
       grid,
       totalRows: rows,
       seatsPerRow: totalCols,
     });
+
+    roomIndex++;
   }
+
+  const middleRankings: GroupRanking[] = middleBuckets.map((bucket) => ({
+    rank: bucket.rank,
+    group: bucket.initialGroup ?? 'D',
+    examCode: bucket.examCode,
+    totalStudents: bucket.totalStudents,
+  }));
 
   // Count violations
   let violations = 0;
@@ -362,5 +412,9 @@ export function allocateRooms(
     }
   }
 
-  return { rooms, groupRankings: rankings, violations };
+  return {
+    rooms,
+    groupRankings: [...topRankings, ...middleRankings].sort((a, b) => a.rank - b.rank),
+    violations,
+  };
 }
