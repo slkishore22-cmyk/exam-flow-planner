@@ -346,19 +346,25 @@ export function allocateRooms(
   const groupPositions = buildGroupPositions(rows, totalCols);
   const { oddRowPositions, evenRowPositions } = buildMiddlePositionsByParity(rows, mainColumns, seatsPerColumn);
 
+  // Two lanes for middle columns, each alternates parity per room
+  // Lane 0: even rows in even rooms, odd rows in odd rooms
+  // Lane 1: odd rows in even rooms, even rows in odd rooms
+  interface LaneState {
+    currentBucket: MiddleExamBucket | null;
+  }
+  const lane0: LaneState = { currentBucket: null };
+  const lane1: LaneState = { currentBucket: null };
+  let nextBucketIdx = 0;
+
   const rooms: RoomAllocation[] = [];
-  let nextMiddleBucketIndex = 0;
   let roomIndex = 0;
 
-  // Track the current middle bucket being consumed
-  let currentMiddleBucket: MiddleExamBucket | null = null;
-  // Track which parity set this bucket started on
-  let currentBucketStartedOnEven = true; // first bucket starts on even rows (D)
+  const hasPending = () =>
+    queueA.length > 0 || queueB.length > 0 ||
+    nextBucketIdx < middleBuckets.length ||
+    lane0.currentBucket !== null || lane1.currentBucket !== null;
 
-  const hasPendingMiddle = () =>
-    nextMiddleBucketIndex < middleBuckets.length || currentMiddleBucket !== null;
-
-  while (queueA.length > 0 || queueB.length > 0 || hasPendingMiddle()) {
+  while (hasPending()) {
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     const roomStudents: StudentRecord[] = [];
 
@@ -366,70 +372,39 @@ export function allocateRooms(
     fillPositions([...groupPositions['A']], queueA, grid, roomStudents);
     fillPositions([...groupPositions['B']], queueB, grid, roomStudents);
 
-    // Determine which parity set to fill first for this room
-    // Even-indexed rooms: fill even rows (D) first, then odd rows (C)
-    // Odd-indexed rooms: fill odd rows (C) first, then even rows (D)
-    const primaryPositions = roomIndex % 2 === 0 ? [...evenRowPositions] : [...oddRowPositions];
-    const secondaryPositions = roomIndex % 2 === 0 ? [...oddRowPositions] : [...evenRowPositions];
-    const primaryCapacity = primaryPositions.length;
-    const secondaryCapacity = secondaryPositions.length;
+    // Lane 0 targets: even rows in even rooms, odd rows in odd rooms
+    // Lane 1 targets: odd rows in even rooms, even rows in odd rooms
+    const lane0Positions = roomIndex % 2 === 0 ? [...evenRowPositions] : [...oddRowPositions];
+    const lane1Positions = roomIndex % 2 === 0 ? [...oddRowPositions] : [...evenRowPositions];
 
-    // Fill PRIMARY middle positions
-    // Try to use current bucket first, then pull new buckets
-    const primaryQueue: StudentRecord[] = [];
-    while (primaryQueue.length < primaryCapacity) {
-      if (!currentMiddleBucket && nextMiddleBucketIndex < middleBuckets.length) {
-        currentMiddleBucket = middleBuckets[nextMiddleBucketIndex++];
-        currentBucketStartedOnEven = roomIndex % 2 === 0;
-        currentMiddleBucket.initialGroup = roomIndex % 2 === 0 ? 'D' : 'C';
+    // Fill each lane
+    for (const { lane, positions } of [
+      { lane: lane0, positions: lane0Positions },
+      { lane: lane1, positions: lane1Positions },
+    ]) {
+      const queue: StudentRecord[] = [];
+      const capacity = positions.length;
+
+      while (queue.length < capacity) {
+        if (!lane.currentBucket && nextBucketIdx < middleBuckets.length) {
+          lane.currentBucket = middleBuckets[nextBucketIdx++];
+          // Record initial group based on which parity set
+          const isEvenRowSet = (roomIndex % 2 === 0 && lane === lane0) || (roomIndex % 2 !== 0 && lane === lane1);
+          lane.currentBucket.initialGroup = isEvenRowSet ? 'D' : 'C';
+        }
+        if (!lane.currentBucket) break;
+
+        const needed = capacity - queue.length;
+        const batch = lane.currentBucket.students.splice(0, needed);
+        queue.push(...batch);
+
+        if (lane.currentBucket.students.length === 0) {
+          lane.currentBucket = null;
+        }
       }
-      if (!currentMiddleBucket) break;
 
-      const needed = primaryCapacity - primaryQueue.length;
-      const batch = currentMiddleBucket.students.splice(0, needed);
-      primaryQueue.push(...batch);
-
-      if (currentMiddleBucket.students.length === 0) {
-        currentMiddleBucket = null;
-      }
+      fillPositions(positions, queue, grid, roomStudents);
     }
-    fillPositions(primaryPositions, primaryQueue, grid, roomStudents);
-
-    // Fill SECONDARY middle positions with DIFFERENT exam codes
-    const secondaryQueue: StudentRecord[] = [];
-    // If currentMiddleBucket is still active (same code), skip it for secondary
-    // and pull next buckets
-    const savedBucket = currentMiddleBucket;
-    const savedStartedOnEven = currentBucketStartedOnEven;
-
-    // Use a separate stream for secondary positions
-    let secBucketIndex = nextMiddleBucketIndex;
-    let tempSecBucket: MiddleExamBucket | null = null;
-
-    while (secondaryQueue.length < secondaryCapacity) {
-      if (!tempSecBucket && secBucketIndex < middleBuckets.length) {
-        tempSecBucket = middleBuckets[secBucketIndex++];
-      }
-      if (!tempSecBucket) break;
-
-      const needed = secondaryCapacity - secondaryQueue.length;
-      const batch = tempSecBucket.students.splice(0, needed);
-      secondaryQueue.push(...batch);
-
-      if (tempSecBucket.students.length === 0) {
-        tempSecBucket = null;
-      }
-    }
-
-    // Update the global index
-    nextMiddleBucketIndex = secBucketIndex;
-    // If tempSecBucket still has students, it becomes the next current bucket
-    if (tempSecBucket && tempSecBucket.students.length > 0) {
-      // Push remaining back - actually we consumed from the array directly
-      // so we need to handle this differently
-    }
-
-    fillPositions(secondaryPositions, secondaryQueue, grid, roomStudents);
 
     rooms.push({
       roomNumber: roomIndex + 1,
