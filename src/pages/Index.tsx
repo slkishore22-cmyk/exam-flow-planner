@@ -12,6 +12,7 @@ import {
   GroupRanking,
   deduplicateStudents,
   allocateRooms,
+  resetExamCodeColors,
 } from '@/lib/seating-utils';
 
 const Index = () => {
