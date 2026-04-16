@@ -41,60 +41,43 @@ function getExamSeats(room: ReturnType<typeof allocateRooms>["rooms"][number], e
   );
 }
 
-function getExamRooms(result: ReturnType<typeof allocateRooms>, examCode: string) {
-  return result.rooms.flatMap((room) => (getExamSeats(room, examCode).length > 0 ? [room.roomNumber] : []));
-}
-
 describe("allocateRooms", () => {
-  it("keeps three-digit-count buckets inside contiguous A/B room blocks", () => {
+  it("alternates middle exam codes between D and C across rooms", () => {
     const students = [
-      ...makeStudents("MAM4P", 180, "A"),
-      ...makeStudents("PHY6B", 105, "B"),
-      ...makeStudents("ENG4A", 34, "C"),
-      ...makeStudents("ART2B", 28, "D"),
+      ...makeStudents("CLZ4R", 30, "A"),
+      ...makeStudents("CPZ4E", 30, "B"),
+      ...makeStudents("123", 15, "C"),
     ];
 
     const result = allocateRooms(students, config);
-    const mamRooms = getExamRooms(result, "MAM4P");
-    const phyRooms = getExamRooms(result, "PHY6B");
-    const mamSeats = result.rooms.flatMap((room) => getExamSeats(room, "MAM4P"));
 
-    expect(result.rooms).toHaveLength(10);
-    expect(mamRooms).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(phyRooms).toEqual([7, 8, 9, 10]);
-    expect(mamSeats.every((seat) => seat.group === "A" || seat.group === "B")).toBe(true);
-    expect(result.violations).toBe(0);
+    expect(result.rooms).toHaveLength(2);
+
+    const room1Seats = getExamSeats(result.rooms[0], "123");
+    const room2Seats = getExamSeats(result.rooms[1], "123");
+
+    expect(room1Seats).toHaveLength(6);
+    expect(room2Seats).toHaveLength(9);
+    expect(room1Seats.every((seat) => seat.group === "D")).toBe(true);
+    expect(room2Seats.every((seat) => seat.group === "C")).toBe(true);
   });
 
-  it("fills the middle rows with two-digit buckets before using extra rooms", () => {
+  it("restarts from A and B when only later-ranked buckets remain", () => {
     const students = [
-      ...makeStudents("MAM4P", 180, "A"),
-      ...makeStudents("PHY6B", 105, "B"),
-      ...makeStudents("ENG4A", 34, "C"),
-      ...makeStudents("ART2B", 28, "D"),
-      ...makeStudents("SAYSB", 1, "E"),
-      ...makeStudents("SAKSB", 1, "F"),
-      ...makeStudents("PSDEJ", 1, "G"),
-      ...makeStudents("MGR2C", 1, "H"),
-      ...makeStudents("MCG3A", 1, "I"),
-      ...makeStudents("CPW6C", 1, "J"),
+      ...makeStudents("CLZ4R", 30, "A"),
+      ...makeStudents("CPZ4E", 30, "B"),
+      ...makeStudents("123", 45, "C"),
     ];
 
     const result = allocateRooms(students, config);
-    const engSeats = result.rooms.flatMap((room) => getExamSeats(room, "ENG4A"));
-    const artSeats = result.rooms.flatMap((room) => getExamSeats(room, "ART2B"));
-    const singletonRooms = ["SAYSB", "SAKSB", "PSDEJ", "MGR2C", "MCG3A", "CPW6C"].flatMap((code) =>
-      getExamRooms(result, code)
-    );
 
-    expect(result.rooms).toHaveLength(10);
-    expect(engSeats.length).toBe(34);
-    expect(artSeats.length).toBe(28);
-    expect(engSeats.every((seat) => seat.group === "C")).toBe(true);
-    expect(artSeats.every((seat) => seat.group === "D")).toBe(true);
-    expect(singletonRooms.every((roomNumber) => roomNumber <= 10)).toBe(true);
-    expect(new Set([...engSeats.map((seat) => seat.group), ...artSeats.map((seat) => seat.group)])).toEqual(
-      new Set(["C", "D"])
-    );
+    expect(result.rooms).toHaveLength(3);
+
+    const room3Seats = getExamSeats(result.rooms[2], "123");
+
+    expect(room3Seats).toHaveLength(30);
+    expect(room3Seats.every((seat) => seat.group === "A" || seat.group === "B")).toBe(true);
+    expect(room3Seats.some((seat) => seat.group === "A")).toBe(true);
+    expect(room3Seats.some((seat) => seat.group === "B")).toBe(true);
   });
 });
