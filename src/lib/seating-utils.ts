@@ -497,6 +497,8 @@ export function allocateRooms(
   let primaryCursorA = 0;
   let primaryCursorB = 0;
 
+  // Large codes (>15 students) only go into Group A or B — never the middle (C/D).
+  // Middle rows (C/D) are reserved exclusively for small codes (≤15 students).
   for (const bucket of buckets) {
     if (bucket.totalStudents <= 15) continue;
 
@@ -506,10 +508,7 @@ export function allocateRooms(
       primaryCursorB = allocatePrimaryGroup(bucket, 'B', rooms, primaryCursorB);
     }
 
-    if (bucket.students.length > 0) {
-      allocateMiddleOverflow(bucket, rooms);
-    }
-
+    // If still has leftovers, spill into the OTHER primary group (A↔B), NOT into C/D.
     if (bucket.students.length > 0) {
       if (nextPrimaryGroup === 'A') {
         primaryCursorB = allocatePrimaryGroup(bucket, 'B', rooms, primaryCursorB);
@@ -518,10 +517,22 @@ export function allocateRooms(
       }
     }
 
+    // Still leftover? Add a fresh room and place into the original primary group there.
+    while (bucket.students.length > 0) {
+      rooms.push(makeEmptyRoom(rooms.length));
+      if (nextPrimaryGroup === 'A') {
+        primaryCursorA = allocatePrimaryGroup(bucket, 'A', rooms, rooms.length - 1);
+      } else {
+        primaryCursorB = allocatePrimaryGroup(bucket, 'B', rooms, rooms.length - 1);
+      }
+    }
+
     nextPrimaryGroup = nextPrimaryGroup === 'A' ? 'B' : 'A';
   }
 
-  fillAvailableSeats(buckets, rooms);
+  // Fill middle rows (C/D) and any remaining A/B gaps with SMALL codes only (≤15 students).
+  const smallBuckets = buckets.filter((b) => b.totalStudents <= 15);
+  fillAvailableSeats(smallBuckets, rooms);
 
   let extraRooms = 0;
   while (hasRemainingStudents(buckets) && extraRooms < 2) {
