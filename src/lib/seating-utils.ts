@@ -26,66 +26,6 @@ export interface RoomAllocation {
   grid: (StudentRecord | null)[][];
   totalRows: number;
   seatsPerRow: number;
-  isGeneralExam?: boolean;
-}
-
-export const GENERAL_EXAM_THRESHOLD = 1000;
-
-export function generateGeneralExamRooms(
-  students: StudentRecord[],
-  config: RoomConfig
-): AllocationResult {
-  const { studentsPerRoom, mainColumns } = config;
-  const subCols = 2;
-  const totalCols = mainColumns * subCols;
-  const rows = Math.ceil(studentsPerRoom / totalCols);
-
-  const allStudents = [...students].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
-  const total = allStudents.length;
-  const roomsNeeded = Math.ceil(total / studentsPerRoom);
-  const rooms: RoomAllocation[] = [];
-
-  for (let r = 0; r < roomsNeeded; r++) {
-    const maxSeats = Math.min(studentsPerRoom, total - r * studentsPerRoom);
-    const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
-    const roomStudents: StudentRecord[] = [];
-    let seated = 0;
-
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < totalCols; col++) {
-        if (seated >= maxSeats) break;
-        const studentIndex = r * studentsPerRoom + seated;
-        if (studentIndex < total) {
-          grid[row][col] = allStudents[studentIndex];
-          roomStudents.push(allStudents[studentIndex]);
-          seated++;
-        }
-      }
-    }
-
-    rooms.push({
-      roomNumber: r + 1,
-      students: roomStudents,
-      grid,
-      totalRows: rows,
-      seatsPerRow: totalCols,
-      isGeneralExam: true,
-    });
-  }
-
-  // Build simple group rankings from exam codes
-  const codeCountMap: Record<string, number> = {};
-  allStudents.forEach(s => { codeCountMap[s.examCode] = (codeCountMap[s.examCode] || 0) + 1; });
-  const groupRankings: GroupRanking[] = Object.entries(codeCountMap)
-    .sort((a, b) => b[1] - a[1])
-    .map(([code, count], i) => ({
-      rank: i + 1,
-      group: 'A' as const,
-      examCode: code,
-      totalStudents: count,
-    }));
-
-  return { rooms, groupRankings, violations: 0 };
 }
 
 export interface GroupRanking {
