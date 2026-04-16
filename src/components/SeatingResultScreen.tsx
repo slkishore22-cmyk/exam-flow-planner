@@ -151,13 +151,13 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                   cellBorder = '1px solid #E5E5EA';
                   cellContent = null;
                 } else {
-                  const gc = GROUP_COLORS[group];
-                  cellBg = gc.bg;
+                  const ec = getExamCodeColor(student.examCode);
+                  cellBg = ec.bg;
                   cellBorder = isViolation ? '3px solid #EF4444' : '2px solid white';
                   cellContent = (
                     <div className="flex flex-col items-center justify-center gap-0">
-                      <span style={{ fontSize: 11, fontWeight: 700, color: gc.text }}>{student.examCode}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: gc.text, fontFamily: 'monospace' }}>{student.rollNumber}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: ec.text }}>{student.examCode}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: ec.text, fontFamily: 'monospace' }}>{student.rollNumber}</span>
                     </div>
                   );
                 }
