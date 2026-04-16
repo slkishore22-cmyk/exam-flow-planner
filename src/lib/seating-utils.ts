@@ -501,14 +501,14 @@ export function allocateRooms(
   const laneD: LaneState = {
     currentBucket: null,
     preferredGroup: 'D',
-    allowUntouchedBorrow: false,
-    allowExcludedFallback: false,
+    allowUntouchedBorrow: true,
+    allowExcludedFallback: true,
   };
   const laneC: LaneState = {
     currentBucket: null,
     preferredGroup: 'C',
-    allowUntouchedBorrow: false,
-    allowExcludedFallback: false,
+    allowUntouchedBorrow: true,
+    allowExcludedFallback: true,
   };
 
   const rooms: RoomAllocation[] = [];
