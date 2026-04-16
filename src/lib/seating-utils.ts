@@ -43,82 +43,48 @@ export interface AllocationResult {
 
 // ── Colors ──
 
-function normalizeExamCode(examCode: string): string {
-  return examCode.trim().toUpperCase() || 'UNKNOWN';
-}
+// Fixed palette of maximally distinct colors
+const DISTINCT_PALETTE: { bg: string; text: string }[] = [
+  { bg: '#E53935', text: '#FFFFFF' }, // Red
+  { bg: '#1E88E5', text: '#FFFFFF' }, // Blue
+  { bg: '#43A047', text: '#FFFFFF' }, // Green
+  { bg: '#FB8C00', text: '#000000' }, // Orange
+  { bg: '#8E24AA', text: '#FFFFFF' }, // Purple
+  { bg: '#00ACC1', text: '#000000' }, // Cyan
+  { bg: '#D81B60', text: '#FFFFFF' }, // Pink
+  { bg: '#FFD600', text: '#000000' }, // Yellow
+  { bg: '#3949AB', text: '#FFFFFF' }, // Indigo
+  { bg: '#00897B', text: '#FFFFFF' }, // Teal
+  { bg: '#6D4C41', text: '#FFFFFF' }, // Brown
+  { bg: '#546E7A', text: '#FFFFFF' }, // Blue Grey
+  { bg: '#F4511E', text: '#FFFFFF' }, // Deep Orange
+  { bg: '#7CB342', text: '#000000' }, // Light Green
+  { bg: '#C0CA33', text: '#000000' }, // Lime
+  { bg: '#AB47BC', text: '#FFFFFF' }, // Medium Purple
+  { bg: '#26A69A', text: '#000000' }, // Medium Teal
+  { bg: '#EC407A', text: '#FFFFFF' }, // Rose
+  { bg: '#5C6BC0', text: '#FFFFFF' }, // Medium Indigo
+  { bg: '#EF6C00', text: '#FFFFFF' }, // Dark Orange
+];
 
-function hashString(value: string): number {
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
-  }
-  return hash;
-}
+const examCodeColorCache = new Map<string, number>();
+let nextColorIndex = 0;
 
-function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
-  const hue = (((h % 360) + 360) % 360) / 360;
-  const saturation = s / 100;
-  const lightness = l / 100;
-
-  if (saturation === 0) {
-    const channel = Math.round(lightness * 255);
-    return { r: channel, g: channel, b: channel };
-  }
-
-  const q = lightness < 0.5
-    ? lightness * (1 + saturation)
-    : lightness + saturation - lightness * saturation;
-  const p = 2 * lightness - q;
-
-  const hueToRgb = (t: number) => {
-    let temp = t;
-    if (temp < 0) temp += 1;
-    if (temp > 1) temp -= 1;
-    if (temp < 1 / 6) return p + (q - p) * 6 * temp;
-    if (temp < 1 / 2) return q;
-    if (temp < 2 / 3) return p + (q - p) * (2 / 3 - temp) * 6;
-    return p;
-  };
-
-  return {
-    r: Math.round(hueToRgb(hue + 1 / 3) * 255),
-    g: Math.round(hueToRgb(hue) * 255),
-    b: Math.round(hueToRgb(hue - 1 / 3) * 255),
-  };
-}
-
-function getRelativeLuminance({ r, g, b }: { r: number; g: number; b: number }): number {
-  const toLinear = (channel: number) => {
-    const value = channel / 255;
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  };
-
-  const red = toLinear(r);
-  const green = toLinear(g);
-  const blue = toLinear(b);
-
-  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-}
-
-function getReadableTextColor(h: number, s: number, l: number): string {
-  const luminance = getRelativeLuminance(hslToRgb(h, s, l));
-  const whiteContrast = 1.05 / (luminance + 0.05);
-  const blackContrast = (luminance + 0.05) / 0.05;
-
-  return whiteContrast >= blackContrast ? '#FFFFFF' : '#000000';
+export function resetExamCodeColors() {
+  examCodeColorCache.clear();
+  nextColorIndex = 0;
 }
 
 export function getExamCodeColor(examCode: string): { bg: string; text: string } {
-  const normalizedExamCode = normalizeExamCode(examCode);
-  const hash = hashString(normalizedExamCode);
-  const hue = hash % 360;
-  const saturation = 72 + (hash % 12);
-  const lightness = 42 + ((hash >> 4) % 12);
+  const key = examCode.trim().toUpperCase() || 'UNKNOWN';
 
-  return {
-    bg: `hsl(${hue} ${saturation}% ${lightness}%)`,
-    text: getReadableTextColor(hue, saturation, lightness),
-  };
+  if (!examCodeColorCache.has(key)) {
+    examCodeColorCache.set(key, nextColorIndex);
+    nextColorIndex++;
+  }
+
+  const index = examCodeColorCache.get(key)!;
+  return DISTINCT_PALETTE[index % DISTINCT_PALETTE.length];
 }
 
 // Group display colors (for the grid cells)
