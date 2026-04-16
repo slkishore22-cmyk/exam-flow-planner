@@ -191,19 +191,13 @@ export function deduplicateStudents(
 // ── NEW Seating Algorithm ──
 
 type GroupLabel = 'A' | 'B' | 'C' | 'D';
-type MiddleGroupLabel = 'C' | 'D';
 
 interface MiddleExamBucket {
   rank: number;
   examCode: string;
   totalStudents: number;
   students: StudentRecord[];
-  initialGroup: MiddleGroupLabel | null;
-}
-
-interface MiddleLaneState {
-  startGroup: MiddleGroupLabel;
-  currentBucket: MiddleExamBucket | null;
+  initialGroup: 'C' | 'D' | null;
 }
 
 /**
@@ -211,23 +205,21 @@ interface MiddleLaneState {
  * 
  * Pattern per panel:
  *   Col:  1  2  3
- *   R1:   A  C  A
- *   R2:   B  D  B
- *   R3:   A  C  A
- *   R4:   B  D  B
- *   R5:   A  C  A
+ *   R1:   A  C  B
+ *   R2:   B  D  A
+ *   R3:   A  C  B
+ *   R4:   B  D  A
+ *   R5:   A  C  B
  */
 function getGroupForCell(row: number, col: number): GroupLabel {
-  const subCol = col % 3; // 0, 1, 2 within a panel
+  const subCol = col % 3;
   const isOddDisplayRow = row % 2 === 0; // rows 0,2,4
 
   if (isOddDisplayRow) {
-    // A C B pattern
     if (subCol === 0) return 'A';
     if (subCol === 1) return 'C';
     return 'B';
   } else {
-    // B D A pattern
     if (subCol === 0) return 'B';
     if (subCol === 1) return 'D';
     return 'A';
@@ -250,7 +242,33 @@ function buildGroupPositions(rows: number, totalCols: number): Record<GroupLabel
   return positions;
 }
 
-function fillGroupPositions(
+/**
+ * Build middle column positions split by row parity.
+ * oddRowPositions = S2 on rows 0,2,4 (C group rows) — 9 seats
+ * evenRowPositions = S2 on rows 1,3 (D group rows) — 6 seats
+ */
+function buildMiddlePositionsByParity(rows: number, mainColumns: number, seatsPerColumn: number): {
+  oddRowPositions: [number, number][];  // rows 0,2,4
+  evenRowPositions: [number, number][]; // rows 1,3
+} {
+  const oddRowPositions: [number, number][] = [];
+  const evenRowPositions: [number, number][] = [];
+
+  for (let mc = 0; mc < mainColumns; mc++) {
+    const s2 = mc * seatsPerColumn + 1; // middle sub-column
+    for (let r = 0; r < rows; r++) {
+      if (r % 2 === 0) {
+        oddRowPositions.push([r, s2]);
+      } else {
+        evenRowPositions.push([r, s2]);
+      }
+    }
+  }
+
+  return { oddRowPositions, evenRowPositions };
+}
+
+function fillPositions(
   positions: [number, number][],
   source: StudentRecord[],
   grid: (StudentRecord | null)[][],
@@ -264,16 +282,8 @@ function fillGroupPositions(
   }
 }
 
-function getAlternateMiddleGroup(group: MiddleGroupLabel): MiddleGroupLabel {
-  return group === 'C' ? 'D' : 'C';
-}
-
-function getLaneGroupForRoom(startGroup: MiddleGroupLabel, roomIndex: number): MiddleGroupLabel {
-  return roomIndex % 2 === 0 ? startGroup : getAlternateMiddleGroup(startGroup);
-}
-
 /**
- * Rank exam codes by student count descending. A=largest, B=2nd, middle exam codes alternate C/D across rooms.
+ * Rank exam codes by student count descending.
  */
 function rankExamCodes(students: StudentRecord[]): {
   rankings: GroupRanking[];
@@ -306,20 +316,10 @@ function rankExamCodes(students: StudentRecord[]): {
     const [code, studs] = sorted[i];
     if (i === 0) {
       queueA.push(...studs);
-      rankings.push({
-        rank: i + 1,
-        group: 'A',
-        examCode: code,
-        totalStudents: studs.length,
-      });
+      rankings.push({ rank: i + 1, group: 'A', examCode: code, totalStudents: studs.length });
     } else if (i === 1) {
       queueB.push(...studs);
-      rankings.push({
-        rank: i + 1,
-        group: 'B',
-        examCode: code,
-        totalStudents: studs.length,
-      });
+      rankings.push({ rank: i + 1, group: 'B', examCode: code, totalStudents: studs.length });
     } else {
       middleBuckets.push({
         rank: i + 1,
@@ -344,51 +344,66 @@ export function allocateRooms(
 
   const { rankings: topRankings, queueA, queueB, middleBuckets } = rankExamCodes(students);
   const groupPositions = buildGroupPositions(rows, totalCols);
-  const middleLanes: MiddleLaneState[] = [
-    { startGroup: 'D', currentBucket: null },
-    { startGroup: 'C', currentBucket: null },
-  ];
+  const { oddRowPositions, evenRowPositions } = buildMiddlePositionsByParity(rows, mainColumns, seatsPerColumn);
+
+  // Two lanes for middle columns, each alternates parity per room
+  // Lane 0: even rows in even rooms, odd rows in odd rooms
+  // Lane 1: odd rows in even rooms, even rows in odd rooms
+  interface LaneState {
+    currentBucket: MiddleExamBucket | null;
+  }
+  const lane0: LaneState = { currentBucket: null };
+  const lane1: LaneState = { currentBucket: null };
+  let nextBucketIdx = 0;
 
   const rooms: RoomAllocation[] = [];
-  let nextMiddleBucketIndex = 0;
   let roomIndex = 0;
 
-  const hasPendingMiddleStudents = () =>
-    nextMiddleBucketIndex < middleBuckets.length ||
-    middleLanes.some((lane) => lane.currentBucket !== null);
+  const hasPending = () =>
+    queueA.length > 0 || queueB.length > 0 ||
+    nextBucketIdx < middleBuckets.length ||
+    lane0.currentBucket !== null || lane1.currentBucket !== null;
 
-  while (queueA.length > 0 || queueB.length > 0 || hasPendingMiddleStudents()) {
+  while (hasPending()) {
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     const roomStudents: StudentRecord[] = [];
 
-    fillGroupPositions(groupPositions['A'], queueA, grid, roomStudents);
-    fillGroupPositions(groupPositions['B'], queueB, grid, roomStudents);
+    // Fill A and B groups
+    fillPositions([...groupPositions['A']], queueA, grid, roomStudents);
+    fillPositions([...groupPositions['B']], queueB, grid, roomStudents);
 
-    for (const lane of middleLanes) {
-      const targetGroup = getLaneGroupForRoom(lane.startGroup, roomIndex);
+    // Lane 0 targets: even rows in even rooms, odd rows in odd rooms
+    // Lane 1 targets: odd rows in even rooms, even rows in odd rooms
+    const lane0Positions = roomIndex % 2 === 0 ? [...evenRowPositions] : [...oddRowPositions];
+    const lane1Positions = roomIndex % 2 === 0 ? [...oddRowPositions] : [...evenRowPositions];
 
-      // Build a temporary queue for this lane's group in this room
-      // by pulling from current bucket and subsequent buckets as needed
-      const laneQueue: StudentRecord[] = [];
-      const capacity = groupPositions[targetGroup].length;
+    // Fill each lane
+    for (const { lane, positions } of [
+      { lane: lane0, positions: lane0Positions },
+      { lane: lane1, positions: lane1Positions },
+    ]) {
+      const queue: StudentRecord[] = [];
+      const capacity = positions.length;
 
-      while (laneQueue.length < capacity) {
-        if (!lane.currentBucket && nextMiddleBucketIndex < middleBuckets.length) {
-          lane.currentBucket = middleBuckets[nextMiddleBucketIndex++];
-          lane.currentBucket.initialGroup = targetGroup;
+      while (queue.length < capacity) {
+        if (!lane.currentBucket && nextBucketIdx < middleBuckets.length) {
+          lane.currentBucket = middleBuckets[nextBucketIdx++];
+          // Record initial group based on which parity set
+          const isEvenRowSet = (roomIndex % 2 === 0 && lane === lane0) || (roomIndex % 2 !== 0 && lane === lane1);
+          lane.currentBucket.initialGroup = isEvenRowSet ? 'D' : 'C';
         }
         if (!lane.currentBucket) break;
 
-        const needed = capacity - laneQueue.length;
+        const needed = capacity - queue.length;
         const batch = lane.currentBucket.students.splice(0, needed);
-        laneQueue.push(...batch);
+        queue.push(...batch);
 
         if (lane.currentBucket.students.length === 0) {
           lane.currentBucket = null;
         }
       }
 
-      fillGroupPositions(groupPositions[targetGroup], laneQueue, grid, roomStudents);
+      fillPositions(positions, queue, grid, roomStudents);
     }
 
     rooms.push({
