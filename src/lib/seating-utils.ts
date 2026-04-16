@@ -76,10 +76,10 @@ export function getExamCodeColor(examCode: string): { bg: string; text: string }
 
 // Group display colors (for the grid cells)
 export const GROUP_COLORS: Record<string, { bg: string; text: string }> = {
-  A: { bg: '#1D1D1F', text: '#FFFFFF' },
-  B: { bg: '#3A3A3C', text: '#FFFFFF' },
-  C: { bg: '#6E6E73', text: '#FFFFFF' },
-  D: { bg: '#AEAEB2', text: '#000000' },
+  A: { bg: '#1565C0', text: '#FFFFFF' },
+  B: { bg: '#C62828', text: '#FFFFFF' },
+  C: { bg: '#2E7D32', text: '#FFFFFF' },
+  D: { bg: '#F57F17', text: '#000000' },
 };
 
 // ── PDF Extraction ──
