@@ -362,16 +362,24 @@ export function allocateRooms(students: StudentRecord[], config: RoomConfig): Al
   let primaryCursor = 0;
   primaryBuckets.forEach((bucket, index) => {
     const groupOrder = index % 2 === 0 ? (['A', 'B'] as const) : (['B', 'A'] as const);
-    primaryCursor = fillBucketAcrossRooms(bucket, rooms, groupOrder, groupCapacity, primaryCursor);
+    primaryCursor = fillBucketWithExpansion(bucket, rooms, groupOrder, groupCapacity, primaryCursor);
   });
 
+  // Middle buckets: fill C/D first, then A/B, only inside existing rooms
   middleBuckets.forEach((bucket, index) => {
     const groupOrder = index % 2 === 0 ? (['C', 'D', 'A', 'B'] as const) : (['D', 'C', 'B', 'A'] as const);
-    fillBucketAcrossRooms(bucket, rooms, groupOrder, groupCapacity, 0);
+    fillBucketIntoExistingRooms(bucket, rooms, groupOrder, groupCapacity, 0);
+    if (bucket.students.length > 0) {
+      fillBucketWithExpansion(bucket, rooms, groupOrder, groupCapacity, 0);
+    }
   });
 
+  // Small buckets: fillers for any remaining gaps
   smallBuckets.forEach((bucket) => {
-    fillBucketAcrossRooms(bucket, rooms, ['D', 'C', 'A', 'B'], groupCapacity, 0);
+    fillBucketIntoExistingRooms(bucket, rooms, ['D', 'C', 'A', 'B'], groupCapacity, 0);
+    if (bucket.students.length > 0) {
+      fillBucketWithExpansion(bucket, rooms, ['D', 'C', 'A', 'B'], groupCapacity, 0);
+    }
   });
 
   const roomAllocations = buildRoomAllocations(rooms, rows, totalCols, groupPositions).filter(
