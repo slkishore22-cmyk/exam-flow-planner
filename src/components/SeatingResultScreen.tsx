@@ -13,7 +13,8 @@ interface SeatingResultScreenProps {
 
 const GROUP_LABELS = ['A', 'B', 'C', 'D'] as const;
 
-function getGroupForCell(row: number, col: number): 'A' | 'B' | 'C' | 'D' {
+function getGroupForCell(row: number, col: number, isGeneralExam?: boolean): 'A' | 'B' | 'C' | 'D' {
+  if (isGeneralExam) return 'A';
   const subCol = col % 3;
   const isOddRow = row % 2 === 0;
   const isMiddleCol = subCol === 1;
