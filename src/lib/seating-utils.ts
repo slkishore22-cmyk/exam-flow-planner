@@ -280,164 +280,100 @@ function rankExamCodes(students: StudentRecord[]): ExamBucket[] {
 
 interface RoomSlot {
   roomIndex: number;
+  /** examCode currently occupying each group lane in this room (null = free) */
+  occupied: Record<GroupLabel, string | null>;
+  /** Students assigned to each group lane */
   assigned: Record<GroupLabel, StudentRecord[]>;
 }
 
 function makeEmptyRoom(idx: number): RoomSlot {
   return {
     roomIndex: idx,
+    occupied: { A: null, B: null, C: null, D: null },
     assigned: { A: [], B: [], C: [], D: [] },
   };
 }
 
-function getGroupFill(room: RoomSlot, group: GroupLabel): number {
-  return room.assigned[group].length;
-}
-
-function getGroupRemaining(room: RoomSlot, group: GroupLabel): number {
-  return GROUP_CAPACITY[group] - getGroupFill(room, group);
-}
-
-function roomHasExamCode(room: RoomSlot, examCode: string): boolean {
-  return (['A', 'B', 'C', 'D'] as GroupLabel[]).some((group) =>
-    room.assigned[group].some((student) => student.examCode === examCode)
-  );
-}
-
-function roomHasExamCodeInOtherGroup(room: RoomSlot, examCode: string, group: GroupLabel): boolean {
-  return (['A', 'B', 'C', 'D'] as GroupLabel[]).some(
-    (currentGroup) =>
-      currentGroup !== group && room.assigned[currentGroup].some((student) => student.examCode === examCode)
-  );
-}
-
-function appendToGroup(room: RoomSlot, group: GroupLabel, bucket: ExamBucket, maxCount: number): number {
-  const remainingCapacity = getGroupRemaining(room, group);
-  if (remainingCapacity <= 0 || bucket.students.length === 0) return 0;
-  if (roomHasExamCodeInOtherGroup(room, bucket.examCode, group)) return 0;
-
-  const take = Math.min(maxCount, remainingCapacity, bucket.students.length);
-  if (take <= 0) return 0;
-
-  room.assigned[group].push(...bucket.students.splice(0, take));
-  if (bucket.assignedGroup === null) bucket.assignedGroup = group;
-  return take;
-}
-
-function allocatePrimaryGroup(
+/**
+ * Allocate a bucket across consecutive rooms in a given group lane.
+ * Returns number of rooms consumed. Bucket students are drained as allocated.
+ */
+function allocateBucketToGroup(
   bucket: ExamBucket,
   group: GroupLabel,
   rooms: RoomSlot[],
   startRoom: number
 ): number {
-  let cursor = startRoom;
+  const cap = GROUP_CAPACITY[group];
+  let roomCursor = startRoom;
+  let roomsUsed = 0;
 
-  while (bucket.students.length > 0 && cursor < rooms.length) {
-    const room = rooms[cursor];
-
-    if (getGroupFill(room, group) !== 0 || roomHasExamCode(room, bucket.examCode)) {
-      cursor++;
+  while (bucket.students.length > 0) {
+    // Find next room where this group lane is free AND no neighboring lane has same examCode
+    while (roomCursor < rooms.length && rooms[roomCursor].occupied[group] !== null) {
+      roomCursor++;
+    }
+    if (roomCursor >= rooms.length) {
+      // Need to extend rooms array
+      rooms.push(makeEmptyRoom(rooms.length));
+    }
+    const room = rooms[roomCursor];
+    // Avoid placing same examCode in two adjacent groups in same room (creates violations)
+    const conflicts = Object.values(room.occupied).some((c) => c === bucket.examCode);
+    if (conflicts) {
+      roomCursor++;
       continue;
     }
 
-    appendToGroup(room, group, bucket, GROUP_CAPACITY[group]);
-    cursor++;
+    const take = Math.min(cap, bucket.students.length);
+    room.occupied[group] = bucket.examCode;
+    room.assigned[group] = bucket.students.splice(0, take);
+    if (bucket.assignedGroup === null) bucket.assignedGroup = group;
+    roomsUsed++;
+    roomCursor++;
   }
-
-  return cursor;
+  return roomsUsed;
 }
 
-function buildMiddleOverflowTargets(roomCount: number): Array<{ roomIndex: number; group: GroupLabel }> {
-  const targets: Array<{ roomIndex: number; group: GroupLabel }> = [];
+/**
+ * Fill remaining seats with smaller buckets, preferring middle rows (C/D) for small codes
+ * and never mixing same examCode in adjacent groups within a room.
+ */
+function fillRemaining(buckets: ExamBucket[], rooms: RoomSlot[]) {
+  const groupOrder: GroupLabel[] = ['C', 'D', 'A', 'B'];
 
-  for (let roomIndex = 0; roomIndex < roomCount; roomIndex++) {
-    targets.push({ roomIndex, group: roomIndex % 2 === 0 ? 'C' : 'D' });
-  }
+  // Sort remaining buckets by size descending
+  const remaining = () => buckets.filter((b) => b.students.length > 0).sort((a, b) => b.students.length - a.students.length);
 
-  for (let roomIndex = 0; roomIndex < roomCount; roomIndex++) {
-    targets.push({ roomIndex, group: roomIndex % 2 === 0 ? 'D' : 'C' });
-  }
+  let safety = 10000;
+  while (remaining().length > 0 && safety-- > 0) {
+    const list = remaining();
+    let placed = false;
 
-  return targets;
-}
+    for (const bucket of list) {
+      // Try to place into smallest free lane that fits
+      for (const room of rooms) {
+        if (bucket.students.length === 0) break;
+        for (const g of groupOrder) {
+          if (room.occupied[g] !== null) continue;
+          // No same examCode already in this room
+          if (Object.values(room.occupied).some((c) => c === bucket.examCode)) continue;
+          const cap = GROUP_CAPACITY[g];
+          const take = Math.min(cap, bucket.students.length);
+          room.occupied[g] = bucket.examCode;
+          room.assigned[g] = bucket.students.splice(0, take);
+          if (bucket.assignedGroup === null) bucket.assignedGroup = g;
+          placed = true;
+          break;
+        }
+      }
+    }
 
-function allocateMiddleOverflow(bucket: ExamBucket, rooms: RoomSlot[]) {
-  for (const target of buildMiddleOverflowTargets(rooms.length)) {
-    if (bucket.students.length === 0) break;
-
-    const room = rooms[target.roomIndex];
-    if (getGroupFill(room, target.group) !== 0) continue;
-    if (roomHasExamCode(room, bucket.examCode)) continue;
-
-    appendToGroup(room, target.group, bucket, GROUP_CAPACITY[target.group]);
-  }
-}
-
-function selectBestBucket(
-  buckets: ExamBucket[],
-  room: RoomSlot,
-  group: GroupLabel,
-  space: number
-): ExamBucket | null {
-  const candidates = buckets.filter(
-    (bucket) => bucket.students.length > 0 && !roomHasExamCodeInOtherGroup(room, bucket.examCode, group)
-  );
-
-  if (candidates.length === 0) return null;
-
-  const sorter = (a: ExamBucket, b: ExamBucket) => {
-    if (b.students.length !== a.students.length) return b.students.length - a.students.length;
-    return a.rank - b.rank;
-  };
-
-  const fitting = candidates.filter((bucket) => bucket.students.length <= space).sort(sorter);
-  if (fitting.length > 0) return fitting[0];
-
-  return [...candidates].sort(sorter)[0];
-}
-
-function fillPass(
-  buckets: ExamBucket[],
-  rooms: RoomSlot[],
-  groups: GroupLabel[],
-  mode: 'partial' | 'empty'
-): boolean {
-  let progress = false;
-
-  for (const room of rooms) {
-    for (const group of groups) {
-      const fill = getGroupFill(room, group);
-      const remaining = getGroupRemaining(room, group);
-      if (remaining <= 0) continue;
-      if (mode === 'partial' && fill === 0) continue;
-      if (mode === 'empty' && fill > 0) continue;
-
-      const bucket = selectBestBucket(buckets, room, group, remaining);
-      if (!bucket) continue;
-
-      const placed = appendToGroup(room, group, bucket, remaining);
-      if (placed > 0) progress = true;
+    if (!placed) {
+      // No free lane anywhere — add a new room
+      rooms.push(makeEmptyRoom(rooms.length));
     }
   }
-
-  return progress;
-}
-
-function fillAvailableSeats(buckets: ExamBucket[], rooms: RoomSlot[]) {
-  let progressed = true;
-
-  while (progressed) {
-    progressed = false;
-
-    while (fillPass(buckets, rooms, ['C', 'D'], 'partial')) progressed = true;
-    while (fillPass(buckets, rooms, ['A', 'B'], 'partial')) progressed = true;
-    while (fillPass(buckets, rooms, ['C', 'D'], 'empty')) progressed = true;
-    while (fillPass(buckets, rooms, ['A', 'B'], 'empty')) progressed = true;
-  }
-}
-
-function hasRemainingStudents(buckets: ExamBucket[]): boolean {
-  return buckets.some((bucket) => bucket.students.length > 0);
 }
 
 /** Detect & fix adjacency violations by swapping students between cells. */
@@ -458,6 +394,7 @@ function fixViolations(grid: (StudentRecord | null)[][], rows: number, cols: num
       for (let c = 0; c < cols; c++) {
         if (!grid[r][c]) continue;
         if (!hasViolation(grid, r, c, rows, cols)) continue;
+        // search swap partner
         outer: for (let r2 = 0; r2 < rows; r2++) {
           for (let c2 = 0; c2 < cols; c2++) {
             if (r2 === r && c2 === c) continue;
@@ -489,52 +426,43 @@ export function allocateRooms(
   const rows = 5;
 
   const buckets = rankExamCodes(students);
-  const roomStrength = Math.max(1, Math.min(45, config.studentsPerRoom || 45));
-  const initialRoomCount = Math.max(1, Math.ceil(students.length / roomStrength));
+
+  // Estimate initial room count
+  const totalStudents = students.length;
+  const initialRoomCount = Math.max(1, Math.ceil(totalStudents / 45));
   const rooms: RoomSlot[] = Array.from({ length: initialRoomCount }, (_, i) => makeEmptyRoom(i));
 
-  let nextPrimaryGroup: GroupLabel = 'A';
-  let primaryCursorA = 0;
-  let primaryCursorB = 0;
+  // Step 1 — Allocate big buckets to A then B alternating, each starting at room 0
+  // Strategy:
+  //   - Big code #1 → Group A starting room 0
+  //   - Big code #2 → Group B starting room 0
+  //   - Big code #3 → Group A starting at first room where A is free
+  //   - Big code #4 → Group B starting at first room where B is free
+  //   - Continue until codes become "small" (≤ 9 students) — those go to middle.
+  let aCursor = 0;
+  let bCursor = 0;
+  let toggleA = true; // alternate which side we feed first
 
   for (const bucket of buckets) {
-    if (bucket.totalStudents <= 15) continue;
+    if (bucket.students.length === 0) continue;
+    // Small codes go to middle/fill-remaining phase
+    if (bucket.totalStudents <= 9) continue;
 
-    if (nextPrimaryGroup === 'A') {
-      primaryCursorA = allocatePrimaryGroup(bucket, 'A', rooms, primaryCursorA);
+    if (toggleA) {
+      // find first room where A is free
+      while (aCursor < rooms.length && rooms[aCursor].occupied.A !== null) aCursor++;
+      allocateBucketToGroup(bucket, 'A', rooms, aCursor);
     } else {
-      primaryCursorB = allocatePrimaryGroup(bucket, 'B', rooms, primaryCursorB);
+      while (bCursor < rooms.length && rooms[bCursor].occupied.B !== null) bCursor++;
+      allocateBucketToGroup(bucket, 'B', rooms, bCursor);
     }
-
-    if (bucket.students.length > 0) {
-      allocateMiddleOverflow(bucket, rooms);
-    }
-
-    if (bucket.students.length > 0) {
-      if (nextPrimaryGroup === 'A') {
-        primaryCursorB = allocatePrimaryGroup(bucket, 'B', rooms, primaryCursorB);
-      } else {
-        primaryCursorA = allocatePrimaryGroup(bucket, 'A', rooms, primaryCursorA);
-      }
-    }
-
-    nextPrimaryGroup = nextPrimaryGroup === 'A' ? 'B' : 'A';
+    toggleA = !toggleA;
   }
 
-  fillAvailableSeats(buckets, rooms);
+  // Step 2 — Fill remaining (middle rows + leftover side lanes) with smaller buckets
+  fillRemaining(buckets, rooms);
 
-  let extraRooms = 0;
-  while (hasRemainingStudents(buckets) && extraRooms < 2) {
-    rooms.push(makeEmptyRoom(rooms.length));
-    fillAvailableSeats(buckets, rooms);
-    extraRooms++;
-  }
-
-  while (hasRemainingStudents(buckets)) {
-    rooms.push(makeEmptyRoom(rooms.length));
-    fillAvailableSeats(buckets, rooms);
-  }
-
+  // Step 3 — Build grids from room slots
   const groupPositions = buildRoomGroupPositions(rows, totalCols);
   const roomAllocations: RoomAllocation[] = [];
 
@@ -542,14 +470,13 @@ export function allocateRooms(
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     const roomStudents: StudentRecord[] = [];
 
-    (['A', 'B', 'C', 'D'] as GroupLabel[]).forEach((group) => {
-      const positions = groupPositions[group];
-      const groupStudents = room.assigned[group];
-
-      for (let i = 0; i < groupStudents.length && i < positions.length; i++) {
+    (['A', 'B', 'C', 'D'] as GroupLabel[]).forEach((g) => {
+      const positions = groupPositions[g];
+      const studs = room.assigned[g];
+      for (let i = 0; i < studs.length && i < positions.length; i++) {
         const [r, c] = positions[i];
-        grid[r][c] = groupStudents[i];
-        roomStudents.push(groupStudents[i]);
+        grid[r][c] = studs[i];
+        roomStudents.push(studs[i]);
       }
     });
 
@@ -564,23 +491,24 @@ export function allocateRooms(
     });
   }
 
+  // Drop trailing fully-empty rooms
   while (roomAllocations.length > 0 && roomAllocations[roomAllocations.length - 1].students.length === 0) {
     roomAllocations.pop();
   }
 
-  roomAllocations.forEach((room, index) => {
-    room.roomNumber = index + 1;
-  });
+  // Renumber sequentially
+  roomAllocations.forEach((r, i) => (r.roomNumber = i + 1));
 
   const groupRankings: GroupRanking[] = buckets
-    .map((bucket) => ({
-      rank: bucket.rank,
-      group: (bucket.assignedGroup ?? 'A') as GroupLabel,
-      examCode: bucket.examCode,
-      totalStudents: bucket.totalStudents,
+    .map((b) => ({
+      rank: b.rank,
+      group: (b.assignedGroup ?? 'A') as GroupLabel,
+      examCode: b.examCode,
+      totalStudents: b.totalStudents,
     }))
     .sort((a, b) => a.rank - b.rank);
 
+  // Count violations
   let violations = 0;
   for (const room of roomAllocations) {
     for (let r = 0; r < rows; r++) {
