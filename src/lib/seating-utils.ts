@@ -563,6 +563,9 @@ export function allocateRooms(
       fillPositions(positions, laneStudents, grid, roomStudents);
     }
 
+    // Post-process: swap students to fix any adjacency violations
+    fixViolations(grid, rows, totalCols);
+
     rooms.push({
       roomNumber: roomIndex + 1,
       students: roomStudents,
