@@ -293,6 +293,80 @@ function fillPositions(
 }
 
 /**
+ * Post-processing: swap students within a room's grid to eliminate adjacency violations.
+ * Tries up to maxPasses full scans. Each violation found triggers a search for a safe swap partner.
+ */
+function fixViolations(grid: (StudentRecord | null)[][], rows: number, totalCols: number, maxPasses = 20) {
+  for (let pass = 0; pass < maxPasses; pass++) {
+    let fixed = false;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < totalCols; c++) {
+        const cell = grid[r][c];
+        if (!cell) continue;
+
+        if (!hasAdjacentViolation(grid, r, c, rows, totalCols)) continue;
+
+        // Find a swap partner that resolves this violation without creating new ones
+        const swapped = findAndSwap(grid, r, c, rows, totalCols);
+        if (swapped) fixed = true;
+      }
+    }
+
+    if (!fixed) break; // No more violations fixable
+  }
+}
+
+function hasAdjacentViolation(grid: (StudentRecord | null)[][], r: number, c: number, rows: number, totalCols: number): boolean {
+  const code = grid[r][c]?.examCode;
+  if (!code) return false;
+  if (c + 1 < totalCols && grid[r][c + 1]?.examCode === code) return true;
+  if (c - 1 >= 0 && grid[r][c - 1]?.examCode === code) return true;
+  if (r + 1 < rows && grid[r + 1]?.[c]?.examCode === code) return true;
+  if (r - 1 >= 0 && grid[r - 1]?.[c]?.examCode === code) return true;
+  return false;
+}
+
+function wouldCauseViolation(grid: (StudentRecord | null)[][], r: number, c: number, examCode: string, rows: number, totalCols: number): boolean {
+  if (c + 1 < totalCols && grid[r][c + 1]?.examCode === examCode) return true;
+  if (c - 1 >= 0 && grid[r][c - 1]?.examCode === examCode) return true;
+  if (r + 1 < rows && grid[r + 1]?.[c]?.examCode === examCode) return true;
+  if (r - 1 >= 0 && grid[r - 1]?.[c]?.examCode === examCode) return true;
+  return false;
+}
+
+function findAndSwap(grid: (StudentRecord | null)[][], r1: number, c1: number, rows: number, totalCols: number): boolean {
+  const cellA = grid[r1][c1]!;
+
+  for (let r2 = 0; r2 < rows; r2++) {
+    for (let c2 = 0; c2 < totalCols; c2++) {
+      if (r2 === r1 && c2 === c1) continue;
+      const cellB = grid[r2][c2];
+      if (!cellB) continue;
+      if (cellB.examCode === cellA.examCode) continue; // Same code swap is useless
+
+      // Check if swapping would fix violations without creating new ones
+      // Temporarily swap
+      grid[r1][c1] = cellB;
+      grid[r2][c2] = cellA;
+
+      const aOk = !hasAdjacentViolation(grid, r1, c1, rows, totalCols);
+      const bOk = !hasAdjacentViolation(grid, r2, c2, rows, totalCols);
+
+      if (aOk && bOk) {
+        return true; // Swap is good, keep it
+      }
+
+      // Revert
+      grid[r1][c1] = cellA;
+      grid[r2][c2] = cellB;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Rank exam codes by student count descending.
  */
 function rankExamCodes(students: StudentRecord[]): ExamBucket[] {
