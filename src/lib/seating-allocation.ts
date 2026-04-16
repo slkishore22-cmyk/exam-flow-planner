@@ -148,14 +148,10 @@ function getExamGroupsInRoom(room: RoomSlot, examCode: string): GroupLabel[] {
   return GROUPS.filter((group) => room.assigned[group].some((student) => student.examCode === examCode));
 }
 
-function canPlaceExamCodeInGroup(room: RoomSlot, examCode: string, group: GroupLabel): boolean {
-  const occupiedGroups = getExamGroupsInRoom(room, examCode);
-  if (occupiedGroups.length === 0) return true;
-
-  return occupiedGroups.every(
-    (occupiedGroup) =>
-      SAME_CODE_COMPATIBILITY[occupiedGroup].includes(group) && SAME_CODE_COMPATIBILITY[group].includes(occupiedGroup)
-  );
+function canPlaceExamCodeInGroup(_room: RoomSlot, _examCode: string, _group: GroupLabel): boolean {
+  // Same exam code is allowed in any group within the same room.
+  // Adjacency violations are resolved later by fixViolations.
+  return true;
 }
 
 function placeIntoGroup(
