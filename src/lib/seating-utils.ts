@@ -192,6 +192,8 @@ export function deduplicateStudents(
 
 type GroupLabel = 'A' | 'B' | 'C' | 'D';
 
+type LaneId = 'A' | 'B' | 'MID_PRIMARY' | 'MID_SECONDARY';
+
 interface ExamBucket {
   rank: number;
   examCode: string;
@@ -202,10 +204,8 @@ interface ExamBucket {
 }
 
 interface LaneState {
+  id: LaneId;
   currentBucket: ExamBucket | null;
-  preferredGroup: GroupLabel;
-  allowUntouchedBorrow: boolean;
-  allowExcludedFallback: boolean;
 }
 
 const GROUP_CYCLE: GroupLabel[] = ['A', 'B', 'D', 'C'];
@@ -402,71 +402,100 @@ function assignBucketGroup(bucket: ExamBucket, group: GroupLabel) {
   }
 }
 
-function pickBucketForLane(
+function pickLargestAvailableBucket(
   buckets: ExamBucket[],
-  lane: LaneState,
-  excludedExamCodes: Set<string>
+  blockedExamCodes: Set<string>,
+  preferredBucket: ExamBucket | null
 ): ExamBucket | null {
-  const strategies: Array<(bucket: ExamBucket) => boolean> = [
-    (bucket) => bucket.students.length > 0 && bucket.preferredGroup === lane.preferredGroup && !excludedExamCodes.has(bucket.examCode),
-    (bucket) => bucket.students.length > 0 && bucket.assignedGroup !== null && !excludedExamCodes.has(bucket.examCode),
-  ];
-
-  if (lane.allowUntouchedBorrow) {
-    strategies.push((bucket) => bucket.students.length > 0 && bucket.assignedGroup === null && !excludedExamCodes.has(bucket.examCode));
+  if (
+    preferredBucket &&
+    preferredBucket.students.length > 0 &&
+    !blockedExamCodes.has(preferredBucket.examCode)
+  ) {
+    return preferredBucket;
   }
 
-  if (lane.allowExcludedFallback) {
-    strategies.push(
-      (bucket) => bucket.students.length > 0 && bucket.preferredGroup === lane.preferredGroup,
-      (bucket) => bucket.students.length > 0 && bucket.assignedGroup !== null,
-    );
+  let bestBucket: ExamBucket | null = null;
 
-    if (lane.allowUntouchedBorrow) {
-      strategies.push((bucket) => bucket.students.length > 0 && bucket.assignedGroup === null);
+  for (const bucket of buckets) {
+    if (bucket.students.length === 0 || blockedExamCodes.has(bucket.examCode)) {
+      continue;
     }
 
-    strategies.push((bucket) => bucket.students.length > 0);
-  }
-
-  for (const strategy of strategies) {
-    const bucket = buckets.find(strategy);
-    if (bucket) {
-      return bucket;
+    if (
+      !bestBucket ||
+      bucket.students.length > bestBucket.students.length ||
+      (bucket.students.length === bestBucket.students.length && bucket.rank < bestBucket.rank)
+    ) {
+      bestBucket = bucket;
     }
   }
 
-  return null;
+  return bestBucket;
 }
 
-function takeLaneStudents(
+function buildProtectedExamCodes(
+  lanePlans: Array<{ lane: LaneState }>,
+  laneIndex: number
+): Set<string> {
+  const protectedExamCodes = new Set<string>();
+  const currentLaneId = lanePlans[laneIndex].lane.id;
+
+  if (currentLaneId === 'A') {
+    const nextBucket = lanePlans[laneIndex + 1]?.lane.currentBucket;
+    if (nextBucket && nextBucket.students.length > 0) {
+      protectedExamCodes.add(nextBucket.examCode);
+    }
+  }
+
+  if (currentLaneId === 'MID_PRIMARY') {
+    const nextBucket = lanePlans[laneIndex + 1]?.lane.currentBucket;
+    if (nextBucket && nextBucket.students.length > 0) {
+      protectedExamCodes.add(nextBucket.examCode);
+    }
+  }
+
+  return protectedExamCodes;
+}
+
+function takeStudentsForLane(
   positions: [number, number][],
   lane: LaneState,
   actualGroup: GroupLabel,
   buckets: ExamBucket[],
-  excludedExamCodes: Set<string>
+  roomUsedExamCodes: Set<string>,
+  protectedExamCodes: Set<string>
 ): StudentRecord[] {
   const laneStudents: StudentRecord[] = [];
+  const laneAssignedExamCodes = new Set<string>();
 
   while (laneStudents.length < positions.length) {
     if (lane.currentBucket && lane.currentBucket.students.length === 0) {
       lane.currentBucket = null;
     }
 
-    if (!lane.currentBucket) {
-      lane.currentBucket = pickBucketForLane(buckets, lane, excludedExamCodes);
+    const blockedExamCodes = new Set<string>(protectedExamCodes);
+    for (const examCode of roomUsedExamCodes) {
+      if (!laneAssignedExamCodes.has(examCode)) {
+        blockedExamCodes.add(examCode);
+      }
     }
 
-    if (!lane.currentBucket) {
+    const bucket = pickLargestAvailableBucket(buckets, blockedExamCodes, lane.currentBucket);
+    if (!bucket) {
+      lane.currentBucket = null;
       break;
     }
 
-    assignBucketGroup(lane.currentBucket, actualGroup);
+    lane.currentBucket = bucket;
+    assignBucketGroup(bucket, actualGroup);
+    laneAssignedExamCodes.add(bucket.examCode);
+    roomUsedExamCodes.add(bucket.examCode);
 
     const needed = positions.length - laneStudents.length;
-    laneStudents.push(...lane.currentBucket.students.splice(0, needed));
+    laneStudents.push(...bucket.students.splice(0, needed));
 
-    if (lane.currentBucket.students.length === 0) {
+    if (bucket.students.length === 0) {
       lane.currentBucket = null;
     }
   }
@@ -487,28 +516,20 @@ export function allocateRooms(
   const { oddRowPositions, evenRowPositions } = buildMiddlePositionsByParity(rows, mainColumns, seatsPerColumn);
 
   const laneA: LaneState = {
+    id: 'A',
     currentBucket: null,
-    preferredGroup: 'A',
-    allowUntouchedBorrow: true,
-    allowExcludedFallback: true,
   };
   const laneB: LaneState = {
+    id: 'B',
     currentBucket: null,
-    preferredGroup: 'B',
-    allowUntouchedBorrow: true,
-    allowExcludedFallback: true,
   };
-  const laneD: LaneState = {
+  const laneMidPrimary: LaneState = {
+    id: 'MID_PRIMARY',
     currentBucket: null,
-    preferredGroup: 'D',
-    allowUntouchedBorrow: true,
-    allowExcludedFallback: false,
   };
-  const laneC: LaneState = {
+  const laneMidSecondary: LaneState = {
+    id: 'MID_SECONDARY',
     currentBucket: null,
-    preferredGroup: 'C',
-    allowUntouchedBorrow: true,
-    allowExcludedFallback: false,
   };
 
   const rooms: RoomAllocation[] = [];
@@ -519,76 +540,61 @@ export function allocateRooms(
   while (hasPending()) {
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     const roomStudents: StudentRecord[] = [];
+      const roomUsedExamCodes = new Set<string>();
 
-    // Track all codes placed by each lane in this room
-    const placedCodesA = new Set<string>();
-    const placedCodesB = new Set<string>();
-    const placedCodesD = new Set<string>();
-    const placedCodesC = new Set<string>();
+      const lanePlans: Array<{
+        actualGroup: GroupLabel;
+        lane: LaneState;
+        positions: [number, number][];
+      }> = [
+        {
+          lane: laneA,
+          positions: [...groupPositions['A']],
+          actualGroup: 'A',
+        },
+        {
+          lane: laneB,
+          positions: [...groupPositions['B']],
+          actualGroup: 'B',
+        },
+        {
+          lane: laneMidPrimary,
+          positions: roomIndex % 2 === 0 ? [...evenRowPositions] : [...oddRowPositions],
+          actualGroup: roomIndex % 2 === 0 ? 'D' : 'C',
+        },
+        {
+          lane: laneMidSecondary,
+          positions: roomIndex % 2 === 0 ? [...oddRowPositions] : [...evenRowPositions],
+          actualGroup: roomIndex % 2 === 0 ? 'C' : 'D',
+        },
+      ];
 
-    const lanePlans: Array<{
-      actualGroup: GroupLabel;
-      getExcludedCodes: () => string[];
-      lane: LaneState;
-      positions: [number, number][];
-      placedCodes: Set<string>;
-    }> = [
-      {
-        lane: laneA,
-        positions: [...groupPositions['A']],
-        actualGroup: 'A',
-        placedCodes: placedCodesA,
-        getExcludedCodes: () => [...placedCodesB, ...placedCodesD, ...placedCodesC],
-      },
-      {
-        lane: laneB,
-        positions: [...groupPositions['B']],
-        actualGroup: 'B',
-        placedCodes: placedCodesB,
-        getExcludedCodes: () => [...placedCodesA, ...placedCodesD, ...placedCodesC],
-      },
-      {
-        lane: laneD,
-        positions: roomIndex % 2 === 0 ? [...evenRowPositions] : [...oddRowPositions],
-        actualGroup: roomIndex % 2 === 0 ? 'D' : 'C',
-        placedCodes: placedCodesD,
-        getExcludedCodes: () => [...placedCodesA, ...placedCodesB, ...placedCodesC],
-      },
-      {
-        lane: laneC,
-        positions: roomIndex % 2 === 0 ? [...oddRowPositions] : [...evenRowPositions],
-        actualGroup: roomIndex % 2 === 0 ? 'C' : 'D',
-        placedCodes: placedCodesC,
-        getExcludedCodes: () => [...placedCodesA, ...placedCodesB, ...placedCodesD],
-      },
-    ];
+      for (let laneIndex = 0; laneIndex < lanePlans.length; laneIndex++) {
+        const { lane, positions, actualGroup } = lanePlans[laneIndex];
+        const laneStudents = takeStudentsForLane(
+          positions,
+          lane,
+          actualGroup,
+          rankedBuckets,
+          roomUsedExamCodes,
+          buildProtectedExamCodes(lanePlans, laneIndex)
+        );
+        fillPositions(positions, laneStudents, grid, roomStudents);
+      }
 
-    for (const { lane, positions, actualGroup, getExcludedCodes, placedCodes } of lanePlans) {
-      const laneStudents = takeLaneStudents(
-        positions,
-        lane,
-        actualGroup,
-        rankedBuckets,
-        new Set(getExcludedCodes())
-      );
-      // Track which codes this lane placed
-      for (const s of laneStudents) placedCodes.add(s.examCode);
-      fillPositions(positions, laneStudents, grid, roomStudents);
+      // Post-process: swap students to fix any edge-case adjacency violations
+      fixViolations(grid, rows, totalCols);
+
+      rooms.push({
+        roomNumber: roomIndex + 1,
+        students: roomStudents,
+        grid,
+        totalRows: rows,
+        seatsPerRow: totalCols,
+      });
+
+      roomIndex++;
     }
-
-    // Post-process: swap students to fix any adjacency violations
-    fixViolations(grid, rows, totalCols);
-
-    rooms.push({
-      roomNumber: roomIndex + 1,
-      students: roomStudents,
-      grid,
-      totalRows: rows,
-      seatsPerRow: totalCols,
-    });
-
-    roomIndex++;
-  }
 
   const groupRankings: GroupRanking[] = rankedBuckets.map((bucket) => ({
     rank: bucket.rank,
