@@ -442,6 +442,8 @@ export function allocateRooms(
 
   const hasPending = () => rankedBuckets.some((bucket) => bucket.students.length > 0);
 
+  const maxPerRoom = config.studentsPerRoom;
+
   while (hasPending()) {
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     const roomStudents: StudentRecord[] = [];
@@ -479,14 +481,17 @@ export function allocateRooms(
     ];
 
     for (const { lane, positions, actualGroup, getExcludedCodes } of lanePlans) {
+      const remaining = maxPerRoom - roomStudents.length;
+      if (remaining <= 0) break;
+      const cappedPositions = positions.slice(0, remaining);
       const laneStudents = takeLaneStudents(
-        positions,
+        cappedPositions,
         lane,
         actualGroup,
         rankedBuckets,
         new Set(getExcludedCodes())
       );
-      fillPositions(positions, laneStudents, grid, roomStudents);
+      fillPositions(cappedPositions, laneStudents, grid, roomStudents);
     }
 
     rooms.push({
