@@ -192,13 +192,23 @@ export function deduplicateStudents(
 
 type GroupLabel = 'A' | 'B' | 'C' | 'D';
 
-interface MiddleExamBucket {
+interface ExamBucket {
   rank: number;
   examCode: string;
   totalStudents: number;
   students: StudentRecord[];
-  initialGroup: 'C' | 'D' | null;
+  preferredGroup: GroupLabel;
+  assignedGroup: GroupLabel | null;
 }
+
+interface LaneState {
+  currentBucket: ExamBucket | null;
+  preferredGroup: GroupLabel;
+  allowUntouchedBorrow: boolean;
+  allowExcludedFallback: boolean;
+}
+
+const GROUP_CYCLE: GroupLabel[] = ['A', 'B', 'D', 'C'];
 
 /**
  * For a 5×9 grid (3 panels × 3 sub-cols), returns the group label for each cell.
@@ -285,12 +295,7 @@ function fillPositions(
 /**
  * Rank exam codes by student count descending.
  */
-function rankExamCodes(students: StudentRecord[]): {
-  rankings: GroupRanking[];
-  queueA: StudentRecord[];
-  queueB: StudentRecord[];
-  middleBuckets: MiddleExamBucket[];
-} {
+function rankExamCodes(students: StudentRecord[]): ExamBucket[] {
   const countMap: Record<string, StudentRecord[]> = {};
   for (const s of students) {
     if (!countMap[s.examCode]) countMap[s.examCode] = [];
@@ -307,31 +312,92 @@ function rankExamCodes(students: StudentRecord[]): {
   }
 
   const sorted = Object.entries(countMap).sort((a, b) => b[1].length - a[1].length);
-  const rankings: GroupRanking[] = [];
-  const queueA: StudentRecord[] = [];
-  const queueB: StudentRecord[] = [];
-  const middleBuckets: MiddleExamBucket[] = [];
+  return sorted.map(([code, studs], index) => ({
+    rank: index + 1,
+    examCode: code,
+    totalStudents: studs.length,
+    students: [...studs],
+    preferredGroup: GROUP_CYCLE[index % GROUP_CYCLE.length],
+    assignedGroup: null,
+  }));
+}
 
-  for (let i = 0; i < sorted.length; i++) {
-    const [code, studs] = sorted[i];
-    if (i === 0) {
-      queueA.push(...studs);
-      rankings.push({ rank: i + 1, group: 'A', examCode: code, totalStudents: studs.length });
-    } else if (i === 1) {
-      queueB.push(...studs);
-      rankings.push({ rank: i + 1, group: 'B', examCode: code, totalStudents: studs.length });
-    } else {
-      middleBuckets.push({
-        rank: i + 1,
-        examCode: code,
-        totalStudents: studs.length,
-        students: [...studs],
-        initialGroup: null,
-      });
+function assignBucketGroup(bucket: ExamBucket, group: GroupLabel) {
+  if (bucket.assignedGroup === null) {
+    bucket.assignedGroup = group;
+  }
+}
+
+function pickBucketForLane(
+  buckets: ExamBucket[],
+  lane: LaneState,
+  excludedExamCodes: Set<string>
+): ExamBucket | null {
+  const strategies: Array<(bucket: ExamBucket) => boolean> = [
+    (bucket) => bucket.students.length > 0 && bucket.preferredGroup === lane.preferredGroup && !excludedExamCodes.has(bucket.examCode),
+    (bucket) => bucket.students.length > 0 && bucket.assignedGroup !== null && !excludedExamCodes.has(bucket.examCode),
+  ];
+
+  if (lane.allowUntouchedBorrow) {
+    strategies.push((bucket) => bucket.students.length > 0 && bucket.assignedGroup === null && !excludedExamCodes.has(bucket.examCode));
+  }
+
+  if (lane.allowExcludedFallback) {
+    strategies.push(
+      (bucket) => bucket.students.length > 0 && bucket.preferredGroup === lane.preferredGroup,
+      (bucket) => bucket.students.length > 0 && bucket.assignedGroup !== null,
+    );
+
+    if (lane.allowUntouchedBorrow) {
+      strategies.push((bucket) => bucket.students.length > 0 && bucket.assignedGroup === null);
+    }
+
+    strategies.push((bucket) => bucket.students.length > 0);
+  }
+
+  for (const strategy of strategies) {
+    const bucket = buckets.find(strategy);
+    if (bucket) {
+      return bucket;
     }
   }
 
-  return { rankings, queueA, queueB, middleBuckets };
+  return null;
+}
+
+function takeLaneStudents(
+  positions: [number, number][],
+  lane: LaneState,
+  actualGroup: GroupLabel,
+  buckets: ExamBucket[],
+  excludedExamCodes: Set<string>
+): StudentRecord[] {
+  const laneStudents: StudentRecord[] = [];
+
+  while (laneStudents.length < positions.length) {
+    if (lane.currentBucket && lane.currentBucket.students.length === 0) {
+      lane.currentBucket = null;
+    }
+
+    if (!lane.currentBucket) {
+      lane.currentBucket = pickBucketForLane(buckets, lane, excludedExamCodes);
+    }
+
+    if (!lane.currentBucket) {
+      break;
+    }
+
+    assignBucketGroup(lane.currentBucket, actualGroup);
+
+    const needed = positions.length - laneStudents.length;
+    laneStudents.push(...lane.currentBucket.students.splice(0, needed));
+
+    if (lane.currentBucket.students.length === 0) {
+      lane.currentBucket = null;
+    }
+  }
+
+  return laneStudents;
 }
 
 export function allocateRooms(
@@ -342,68 +408,85 @@ export function allocateRooms(
   const totalCols = mainColumns * seatsPerColumn;
   const rows = 5;
 
-  const { rankings: topRankings, queueA, queueB, middleBuckets } = rankExamCodes(students);
+  const rankedBuckets = rankExamCodes(students);
   const groupPositions = buildGroupPositions(rows, totalCols);
   const { oddRowPositions, evenRowPositions } = buildMiddlePositionsByParity(rows, mainColumns, seatsPerColumn);
 
-  // Two lanes for middle columns, each alternates parity per room
-  // Lane 0: even rows in even rooms, odd rows in odd rooms
-  // Lane 1: odd rows in even rooms, even rows in odd rooms
-  interface LaneState {
-    currentBucket: MiddleExamBucket | null;
-  }
-  const lane0: LaneState = { currentBucket: null };
-  const lane1: LaneState = { currentBucket: null };
-  let nextBucketIdx = 0;
+  const laneA: LaneState = {
+    currentBucket: null,
+    preferredGroup: 'A',
+    allowUntouchedBorrow: true,
+    allowExcludedFallback: true,
+  };
+  const laneB: LaneState = {
+    currentBucket: null,
+    preferredGroup: 'B',
+    allowUntouchedBorrow: true,
+    allowExcludedFallback: true,
+  };
+  const laneD: LaneState = {
+    currentBucket: null,
+    preferredGroup: 'D',
+    allowUntouchedBorrow: false,
+    allowExcludedFallback: false,
+  };
+  const laneC: LaneState = {
+    currentBucket: null,
+    preferredGroup: 'C',
+    allowUntouchedBorrow: false,
+    allowExcludedFallback: false,
+  };
 
   const rooms: RoomAllocation[] = [];
   let roomIndex = 0;
 
-  const hasPending = () =>
-    queueA.length > 0 || queueB.length > 0 ||
-    nextBucketIdx < middleBuckets.length ||
-    lane0.currentBucket !== null || lane1.currentBucket !== null;
+  const hasPending = () => rankedBuckets.some((bucket) => bucket.students.length > 0);
 
   while (hasPending()) {
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     const roomStudents: StudentRecord[] = [];
 
-    // Fill A and B groups
-    fillPositions([...groupPositions['A']], queueA, grid, roomStudents);
-    fillPositions([...groupPositions['B']], queueB, grid, roomStudents);
+    const lanePlans: Array<{
+      actualGroup: GroupLabel;
+      getExcludedCodes: () => string[];
+      lane: LaneState;
+      positions: [number, number][];
+    }> = [
+      {
+        lane: laneA,
+        positions: [...groupPositions['A']],
+        actualGroup: 'A',
+        getExcludedCodes: () => [laneB.currentBucket?.examCode, laneD.currentBucket?.examCode, laneC.currentBucket?.examCode].filter(Boolean) as string[],
+      },
+      {
+        lane: laneB,
+        positions: [...groupPositions['B']],
+        actualGroup: 'B',
+        getExcludedCodes: () => [laneA.currentBucket?.examCode, laneD.currentBucket?.examCode, laneC.currentBucket?.examCode].filter(Boolean) as string[],
+      },
+      {
+        lane: laneD,
+        positions: roomIndex % 2 === 0 ? [...evenRowPositions] : [...oddRowPositions],
+        actualGroup: roomIndex % 2 === 0 ? 'D' : 'C',
+        getExcludedCodes: () => [laneC.currentBucket?.examCode].filter(Boolean) as string[],
+      },
+      {
+        lane: laneC,
+        positions: roomIndex % 2 === 0 ? [...oddRowPositions] : [...evenRowPositions],
+        actualGroup: roomIndex % 2 === 0 ? 'C' : 'D',
+        getExcludedCodes: () => [laneD.currentBucket?.examCode].filter(Boolean) as string[],
+      },
+    ];
 
-    // Lane 0 targets: even rows in even rooms, odd rows in odd rooms
-    // Lane 1 targets: odd rows in even rooms, even rows in odd rooms
-    const lane0Positions = roomIndex % 2 === 0 ? [...evenRowPositions] : [...oddRowPositions];
-    const lane1Positions = roomIndex % 2 === 0 ? [...oddRowPositions] : [...evenRowPositions];
-
-    // Fill each lane
-    for (const { lane, positions } of [
-      { lane: lane0, positions: lane0Positions },
-      { lane: lane1, positions: lane1Positions },
-    ]) {
-      const queue: StudentRecord[] = [];
-      const capacity = positions.length;
-
-      while (queue.length < capacity) {
-        if (!lane.currentBucket && nextBucketIdx < middleBuckets.length) {
-          lane.currentBucket = middleBuckets[nextBucketIdx++];
-          // Record initial group based on which parity set
-          const isEvenRowSet = (roomIndex % 2 === 0 && lane === lane0) || (roomIndex % 2 !== 0 && lane === lane1);
-          lane.currentBucket.initialGroup = isEvenRowSet ? 'D' : 'C';
-        }
-        if (!lane.currentBucket) break;
-
-        const needed = capacity - queue.length;
-        const batch = lane.currentBucket.students.splice(0, needed);
-        queue.push(...batch);
-
-        if (lane.currentBucket.students.length === 0) {
-          lane.currentBucket = null;
-        }
-      }
-
-      fillPositions(positions, queue, grid, roomStudents);
+    for (const { lane, positions, actualGroup, getExcludedCodes } of lanePlans) {
+      const laneStudents = takeLaneStudents(
+        positions,
+        lane,
+        actualGroup,
+        rankedBuckets,
+        new Set(getExcludedCodes())
+      );
+      fillPositions(positions, laneStudents, grid, roomStudents);
     }
 
     rooms.push({
@@ -417,9 +500,9 @@ export function allocateRooms(
     roomIndex++;
   }
 
-  const middleRankings: GroupRanking[] = middleBuckets.map((bucket) => ({
+  const groupRankings: GroupRanking[] = rankedBuckets.map((bucket) => ({
     rank: bucket.rank,
-    group: bucket.initialGroup ?? 'D',
+    group: bucket.assignedGroup ?? bucket.preferredGroup,
     examCode: bucket.examCode,
     totalStudents: bucket.totalStudents,
   }));
@@ -439,7 +522,7 @@ export function allocateRooms(
 
   return {
     rooms,
-    groupRankings: [...topRankings, ...middleRankings].sort((a, b) => a.rank - b.rank),
+    groupRankings: groupRankings.sort((a, b) => a.rank - b.rank),
     violations,
   };
 }
