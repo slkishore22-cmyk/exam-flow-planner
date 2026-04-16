@@ -502,13 +502,13 @@ export function allocateRooms(
     currentBucket: null,
     preferredGroup: 'D',
     allowUntouchedBorrow: true,
-    allowExcludedFallback: true,
+    allowExcludedFallback: false,
   };
   const laneC: LaneState = {
     currentBucket: null,
     preferredGroup: 'C',
     allowUntouchedBorrow: true,
-    allowExcludedFallback: true,
+    allowExcludedFallback: false,
   };
 
   const rooms: RoomAllocation[] = [];
