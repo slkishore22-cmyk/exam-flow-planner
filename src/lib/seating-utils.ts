@@ -293,6 +293,80 @@ function fillPositions(
 }
 
 /**
+ * Post-processing: swap students within a room's grid to eliminate adjacency violations.
+ * Tries up to maxPasses full scans. Each violation found triggers a search for a safe swap partner.
+ */
+function fixViolations(grid: (StudentRecord | null)[][], rows: number, totalCols: number, maxPasses = 20) {
+  for (let pass = 0; pass < maxPasses; pass++) {
+    let fixed = false;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < totalCols; c++) {
+        const cell = grid[r][c];
+        if (!cell) continue;
+
+        if (!hasAdjacentViolation(grid, r, c, rows, totalCols)) continue;
+
+        // Find a swap partner that resolves this violation without creating new ones
+        const swapped = findAndSwap(grid, r, c, rows, totalCols);
+        if (swapped) fixed = true;
+      }
+    }
+
+    if (!fixed) break; // No more violations fixable
+  }
+}
+
+function hasAdjacentViolation(grid: (StudentRecord | null)[][], r: number, c: number, rows: number, totalCols: number): boolean {
+  const code = grid[r][c]?.examCode;
+  if (!code) return false;
+  if (c + 1 < totalCols && grid[r][c + 1]?.examCode === code) return true;
+  if (c - 1 >= 0 && grid[r][c - 1]?.examCode === code) return true;
+  if (r + 1 < rows && grid[r + 1]?.[c]?.examCode === code) return true;
+  if (r - 1 >= 0 && grid[r - 1]?.[c]?.examCode === code) return true;
+  return false;
+}
+
+function wouldCauseViolation(grid: (StudentRecord | null)[][], r: number, c: number, examCode: string, rows: number, totalCols: number): boolean {
+  if (c + 1 < totalCols && grid[r][c + 1]?.examCode === examCode) return true;
+  if (c - 1 >= 0 && grid[r][c - 1]?.examCode === examCode) return true;
+  if (r + 1 < rows && grid[r + 1]?.[c]?.examCode === examCode) return true;
+  if (r - 1 >= 0 && grid[r - 1]?.[c]?.examCode === examCode) return true;
+  return false;
+}
+
+function findAndSwap(grid: (StudentRecord | null)[][], r1: number, c1: number, rows: number, totalCols: number): boolean {
+  const cellA = grid[r1][c1]!;
+
+  for (let r2 = 0; r2 < rows; r2++) {
+    for (let c2 = 0; c2 < totalCols; c2++) {
+      if (r2 === r1 && c2 === c1) continue;
+      const cellB = grid[r2][c2];
+      if (!cellB) continue;
+      if (cellB.examCode === cellA.examCode) continue; // Same code swap is useless
+
+      // Check if swapping would fix violations without creating new ones
+      // Temporarily swap
+      grid[r1][c1] = cellB;
+      grid[r2][c2] = cellA;
+
+      const aOk = !hasAdjacentViolation(grid, r1, c1, rows, totalCols);
+      const bOk = !hasAdjacentViolation(grid, r2, c2, rows, totalCols);
+
+      if (aOk && bOk) {
+        return true; // Swap is good, keep it
+      }
+
+      // Revert
+      grid[r1][c1] = cellA;
+      grid[r2][c2] = cellB;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Rank exam codes by student count descending.
  */
 function rankExamCodes(students: StudentRecord[]): ExamBucket[] {
@@ -427,13 +501,13 @@ export function allocateRooms(
   const laneD: LaneState = {
     currentBucket: null,
     preferredGroup: 'D',
-    allowUntouchedBorrow: false,
+    allowUntouchedBorrow: true,
     allowExcludedFallback: false,
   };
   const laneC: LaneState = {
     currentBucket: null,
     preferredGroup: 'C',
-    allowUntouchedBorrow: false,
+    allowUntouchedBorrow: true,
     allowExcludedFallback: false,
   };
 
@@ -446,39 +520,50 @@ export function allocateRooms(
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     const roomStudents: StudentRecord[] = [];
 
+    // Track all codes placed by each lane in this room
+    const placedCodesA = new Set<string>();
+    const placedCodesB = new Set<string>();
+    const placedCodesD = new Set<string>();
+    const placedCodesC = new Set<string>();
+
     const lanePlans: Array<{
       actualGroup: GroupLabel;
       getExcludedCodes: () => string[];
       lane: LaneState;
       positions: [number, number][];
+      placedCodes: Set<string>;
     }> = [
       {
         lane: laneA,
         positions: [...groupPositions['A']],
         actualGroup: 'A',
-        getExcludedCodes: () => [laneB.currentBucket?.examCode, laneD.currentBucket?.examCode, laneC.currentBucket?.examCode].filter(Boolean) as string[],
+        placedCodes: placedCodesA,
+        getExcludedCodes: () => [...placedCodesB, ...placedCodesD, ...placedCodesC],
       },
       {
         lane: laneB,
         positions: [...groupPositions['B']],
         actualGroup: 'B',
-        getExcludedCodes: () => [laneA.currentBucket?.examCode, laneD.currentBucket?.examCode, laneC.currentBucket?.examCode].filter(Boolean) as string[],
+        placedCodes: placedCodesB,
+        getExcludedCodes: () => [...placedCodesA, ...placedCodesD, ...placedCodesC],
       },
       {
         lane: laneD,
         positions: roomIndex % 2 === 0 ? [...evenRowPositions] : [...oddRowPositions],
         actualGroup: roomIndex % 2 === 0 ? 'D' : 'C',
-        getExcludedCodes: () => [laneC.currentBucket?.examCode].filter(Boolean) as string[],
+        placedCodes: placedCodesD,
+        getExcludedCodes: () => [...placedCodesA, ...placedCodesB, ...placedCodesC],
       },
       {
         lane: laneC,
         positions: roomIndex % 2 === 0 ? [...oddRowPositions] : [...evenRowPositions],
         actualGroup: roomIndex % 2 === 0 ? 'C' : 'D',
-        getExcludedCodes: () => [laneD.currentBucket?.examCode].filter(Boolean) as string[],
+        placedCodes: placedCodesC,
+        getExcludedCodes: () => [...placedCodesA, ...placedCodesB, ...placedCodesD],
       },
     ];
 
-    for (const { lane, positions, actualGroup, getExcludedCodes } of lanePlans) {
+    for (const { lane, positions, actualGroup, getExcludedCodes, placedCodes } of lanePlans) {
       const laneStudents = takeLaneStudents(
         positions,
         lane,
@@ -486,8 +571,13 @@ export function allocateRooms(
         rankedBuckets,
         new Set(getExcludedCodes())
       );
+      // Track which codes this lane placed
+      for (const s of laneStudents) placedCodes.add(s.examCode);
       fillPositions(positions, laneStudents, grid, roomStudents);
     }
+
+    // Post-process: swap students to fix any adjacency violations
+    fixViolations(grid, rows, totalCols);
 
     rooms.push({
       roomNumber: roomIndex + 1,
