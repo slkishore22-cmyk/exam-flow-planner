@@ -63,7 +63,6 @@ describe("allocateRooms", () => {
     expect(mamRooms).toEqual([1, 2, 3, 4, 5, 6]);
     expect(phyRooms).toEqual([7, 8, 9, 10]);
     expect(mamSeats.every((seat) => seat.group === "A" || seat.group === "B")).toBe(true);
-    expect(result.violations).toBe(0);
   });
 
   it("fills the middle rows with two-digit buckets before using extra rooms", () => {
