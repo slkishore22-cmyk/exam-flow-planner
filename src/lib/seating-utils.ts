@@ -43,35 +43,82 @@ export interface AllocationResult {
 
 // ── Colors ──
 
-const EXAM_CODE_COLORS = [
-  { bg: '#D32F2F', text: '#FFFFFF' },
-  { bg: '#1565C0', text: '#FFFFFF' },
-  { bg: '#2E7D32', text: '#FFFFFF' },
-  { bg: '#FF6F00', text: '#000000' },
-  { bg: '#7B1FA2', text: '#FFFFFF' },
-  { bg: '#00897B', text: '#FFFFFF' },
-  { bg: '#C2185B', text: '#FFFFFF' },
-  { bg: '#0277BD', text: '#FFFFFF' },
-  { bg: '#827717', text: '#FFFFFF' },
-  { bg: '#4527A0', text: '#FFFFFF' },
-  { bg: '#EF6C00', text: '#000000' },
-  { bg: '#00695C', text: '#FFFFFF' },
-  { bg: '#AD1457', text: '#FFFFFF' },
-  { bg: '#558B2F', text: '#FFFFFF' },
-  { bg: '#424242', text: '#FFFFFF' },
-];
+function normalizeExamCode(examCode: string): string {
+  return examCode.trim().toUpperCase() || 'UNKNOWN';
+}
 
-const examCodeColorMap: Record<string, { bg: string; text: string }> = {};
+function hashString(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
+  const hue = (((h % 360) + 360) % 360) / 360;
+  const saturation = s / 100;
+  const lightness = l / 100;
+
+  if (saturation === 0) {
+    const channel = Math.round(lightness * 255);
+    return { r: channel, g: channel, b: channel };
+  }
+
+  const q = lightness < 0.5
+    ? lightness * (1 + saturation)
+    : lightness + saturation - lightness * saturation;
+  const p = 2 * lightness - q;
+
+  const hueToRgb = (t: number) => {
+    let temp = t;
+    if (temp < 0) temp += 1;
+    if (temp > 1) temp -= 1;
+    if (temp < 1 / 6) return p + (q - p) * 6 * temp;
+    if (temp < 1 / 2) return q;
+    if (temp < 2 / 3) return p + (q - p) * (2 / 3 - temp) * 6;
+    return p;
+  };
+
+  return {
+    r: Math.round(hueToRgb(hue + 1 / 3) * 255),
+    g: Math.round(hueToRgb(hue) * 255),
+    b: Math.round(hueToRgb(hue - 1 / 3) * 255),
+  };
+}
+
+function getRelativeLuminance({ r, g, b }: { r: number; g: number; b: number }): number {
+  const toLinear = (channel: number) => {
+    const value = channel / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+
+  const red = toLinear(r);
+  const green = toLinear(g);
+  const blue = toLinear(b);
+
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function getReadableTextColor(h: number, s: number, l: number): string {
+  const luminance = getRelativeLuminance(hslToRgb(h, s, l));
+  const whiteContrast = 1.05 / (luminance + 0.05);
+  const blackContrast = (luminance + 0.05) / 0.05;
+
+  return whiteContrast >= blackContrast ? '#FFFFFF' : '#000000';
+}
 
 export function getExamCodeColor(examCode: string): { bg: string; text: string } {
-  if (!examCodeColorMap[examCode]) {
-    const usedColors = Object.values(examCodeColorMap).map(c => c.bg);
-    const available = EXAM_CODE_COLORS.filter(c => !usedColors.includes(c.bg));
-    examCodeColorMap[examCode] = available.length > 0
-      ? available[0]
-      : EXAM_CODE_COLORS[Object.keys(examCodeColorMap).length % EXAM_CODE_COLORS.length];
-  }
-  return examCodeColorMap[examCode];
+  const normalizedExamCode = normalizeExamCode(examCode);
+  const hash = hashString(normalizedExamCode);
+  const hue = hash % 360;
+  const saturation = 72 + (hash % 12);
+  const lightness = 42 + ((hash >> 4) % 12);
+
+  return {
+    bg: `hsl(${hue} ${saturation}% ${lightness}%)`,
+    text: getReadableTextColor(hue, saturation, lightness),
+  };
 }
 
 // Group display colors (for the grid cells)
