@@ -115,77 +115,97 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
 
   const renderRoomGrid = (room: RoomAllocation, roomIndex: number) => {
     const viol = roomViolations[roomIndex];
+    const isGeneral = room.isGeneralExam;
+    const effectiveSeatsPerCol = isGeneral ? 2 : config.seatsPerColumn;
+
     return (
-      <table className="border-collapse mx-auto" style={{ borderSpacing: 0 }}>
-        <thead>
-          <tr>
-            {Array.from({ length: config.mainColumns }).map((_, mc) => (
-              <React.Fragment key={mc}>
-                {Array.from({ length: config.seatsPerColumn }).map((_, sc) => (
-                  <th key={`${mc}-${sc}`} className="border border-border px-2 py-2 text-xs font-semibold bg-secondary text-secondary-foreground" style={{ minWidth: 90 }}>
-                    {mc * config.seatsPerColumn + sc + 1}
-                  </th>
-                ))}
-                {mc < config.mainColumns - 1 && <th className="w-4 border-none" style={{ minWidth: 16 }} />}
-              </React.Fragment>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {room.grid.map((row, rowIdx) => (
-            <tr key={rowIdx}>
-              {row.map((student, colIdx) => {
-                const mc = Math.floor(colIdx / config.seatsPerColumn);
-                const sc = colIdx % config.seatsPerColumn;
-                const isLastSubCol = sc === config.seatsPerColumn - 1;
-                const isLastMainCol = mc === config.mainColumns - 1;
-                const showSeparator = isLastSubCol && !isLastMainCol;
-                const group = getGroupForCell(rowIdx, colIdx);
-                const isViolation = viol?.violatedCells.has(`${rowIdx}-${colIdx}`);
-
-                let cellContent: React.ReactNode;
-                let cellBg: string;
-                let cellBorder: string;
-
-                if (!student) {
-                  cellBg = '#F5F5F7';
-                  cellBorder = '1px solid #E5E5EA';
-                  cellContent = null;
-                } else {
-                  const gc = GROUP_COLORS[group];
-                  cellBg = gc.bg;
-                  cellBorder = isViolation ? '3px solid #EF4444' : '2px solid white';
-                  cellContent = (
-                    <div className="flex flex-col items-center justify-center gap-0">
-                      <span style={{ fontSize: 11, fontWeight: 700, color: gc.text }}>{student.examCode}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: gc.text, fontFamily: 'monospace' }}>{student.rollNumber}</span>
-                    </div>
-                  );
-                }
-
-                const cell = (
-                  <td key={`${rowIdx}-${colIdx}`} className="text-center align-middle" style={{
-                    minWidth: 90, height: 65, backgroundColor: cellBg, padding: '4px 6px', border: cellBorder,
-                    boxShadow: isViolation && student ? 'inset 0 0 8px rgba(239,68,68,0.4)' : undefined,
-                  }}>
-                    {cellContent}
-                  </td>
-                );
-
-                if (showSeparator) {
-                  return (
-                    <React.Fragment key={`${rowIdx}-${colIdx}`}>
-                      {cell}
-                      <td className="border-none" style={{ minWidth: 16 }} />
-                    </React.Fragment>
-                  );
-                }
-                return cell;
-              })}
+      <div>
+        {isGeneral && (
+          <div className="text-xs text-muted-foreground text-center mb-2">
+            General Exam — Sequential seating — 2 seats per section
+          </div>
+        )}
+        <table className="border-collapse mx-auto" style={{ borderSpacing: 0 }}>
+          <thead>
+            <tr>
+              {Array.from({ length: config.mainColumns }).map((_, mc) => (
+                <React.Fragment key={mc}>
+                  {Array.from({ length: effectiveSeatsPerCol }).map((_, sc) => (
+                    <th key={`${mc}-${sc}`} className="border border-border px-2 py-2 text-xs font-semibold bg-secondary text-secondary-foreground" style={{ minWidth: 90 }}>
+                      {mc * effectiveSeatsPerCol + sc + 1}
+                    </th>
+                  ))}
+                  {mc < config.mainColumns - 1 && <th className="w-4 border-none" style={{ minWidth: 16 }} />}
+                </React.Fragment>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {room.grid.map((row, rowIdx) => (
+              <tr key={rowIdx}>
+                {row.map((student, colIdx) => {
+                  const mc = Math.floor(colIdx / effectiveSeatsPerCol);
+                  const sc = colIdx % effectiveSeatsPerCol;
+                  const isLastSubCol = sc === effectiveSeatsPerCol - 1;
+                  const isLastMainCol = mc === config.mainColumns - 1;
+                  const showSeparator = isLastSubCol && !isLastMainCol;
+                  const isViolation = viol?.violatedCells.has(`${rowIdx}-${colIdx}`);
+
+                  let cellContent: React.ReactNode;
+                  let cellBg: string;
+                  let cellBorder: string;
+
+                  if (!student) {
+                    cellBg = '#F5F5F7';
+                    cellBorder = '1px solid #E5E5EA';
+                    cellContent = null;
+                  } else if (isGeneral) {
+                    const color = getExamCodeColor(student.examCode);
+                    cellBg = '#FFFFFF';
+                    cellBorder = '1px solid #E5E5EA';
+                    cellContent = (
+                      <span style={{ color: color.bg, fontWeight: 600, fontSize: 10, fontFamily: 'monospace' }}>
+                        {student.rollNumber}
+                      </span>
+                    );
+                  } else {
+                    const group = getGroupForCell(rowIdx, colIdx);
+                    const gc = GROUP_COLORS[group];
+                    cellBg = gc.bg;
+                    cellBorder = isViolation ? '3px solid #EF4444' : '2px solid white';
+                    cellContent = (
+                      <div className="flex flex-col items-center justify-center gap-0">
+                        <span style={{ fontSize: 11, fontWeight: 700, color: gc.text }}>{student.examCode}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: gc.text, fontFamily: 'monospace' }}>{student.rollNumber}</span>
+                      </div>
+                    );
+                  }
+
+                  const cell = (
+                    <td key={`${rowIdx}-${colIdx}`} className="text-center align-middle" style={{
+                      minWidth: 90, height: isGeneral ? 48 : 65, backgroundColor: cellBg, padding: '4px 6px', border: cellBorder,
+                      borderRadius: isGeneral ? 4 : undefined,
+                      boxShadow: isViolation && student ? 'inset 0 0 8px rgba(239,68,68,0.4)' : undefined,
+                    }}>
+                      {cellContent}
+                    </td>
+                  );
+
+                  if (showSeparator) {
+                    return (
+                      <React.Fragment key={`${rowIdx}-${colIdx}`}>
+                        {cell}
+                        <td className="border-none" style={{ minWidth: 16 }} />
+                      </React.Fragment>
+                    );
+                  }
+                  return cell;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   };
 
