@@ -56,6 +56,7 @@ const Index = () => {
     const newStudentsPerRoom = Math.ceil(students.length / newRoomCount);
     const newConfig = { ...roomConfig, studentsPerRoom: newStudentsPerRoom };
     setRoomConfig(newConfig);
+    resetExamCodeColors();
     const result = allocateRooms([...students], newConfig);
     setRooms(result.rooms);
     setGroupRankings(result.groupRankings);
