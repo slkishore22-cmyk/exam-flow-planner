@@ -42,6 +42,7 @@ const Index = () => {
 
   const handleGenerate = (config: RoomConfig) => {
     setRoomConfig(config);
+    resetExamCodeColors();
     const result = allocateRooms([...students], config);
     setRooms(result.rooms);
     setGroupRankings(result.groupRankings);
