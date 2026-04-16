@@ -542,13 +542,13 @@ export function allocateRooms(
         lane: laneD,
         positions: roomIndex % 2 === 0 ? [...evenRowPositions] : [...oddRowPositions],
         actualGroup: roomIndex % 2 === 0 ? 'D' : 'C',
-        getExcludedCodes: () => [laneC.currentBucket?.examCode].filter(Boolean) as string[],
+        getExcludedCodes: () => [laneA.currentBucket?.examCode, laneB.currentBucket?.examCode, laneC.currentBucket?.examCode].filter(Boolean) as string[],
       },
       {
         lane: laneC,
         positions: roomIndex % 2 === 0 ? [...oddRowPositions] : [...evenRowPositions],
         actualGroup: roomIndex % 2 === 0 ? 'C' : 'D',
-        getExcludedCodes: () => [laneD.currentBucket?.examCode].filter(Boolean) as string[],
+        getExcludedCodes: () => [laneA.currentBucket?.examCode, laneB.currentBucket?.examCode, laneD.currentBucket?.examCode].filter(Boolean) as string[],
       },
     ];
 
