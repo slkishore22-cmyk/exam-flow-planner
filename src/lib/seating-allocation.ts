@@ -168,6 +168,26 @@ function placeIntoGroup(
   return take;
 }
 
+function placeIntoGroupCapped(
+  room: RoomSlot,
+  group: GroupLabel,
+  bucket: ExamBucket,
+  groupCapacity: Record<GroupLabel, number>,
+  cap: number
+): number {
+  const remaining = getGroupRemaining(room, group, groupCapacity);
+  const take = Math.min(remaining, bucket.students.length, cap);
+  if (take <= 0) return 0;
+  room.assigned[group].push(...bucket.students.splice(0, take));
+  bucket.assignedGroup ??= group;
+  return take;
+}
+
+/**
+ * Spread a bucket evenly across rooms, group-by-group in priority order.
+ * For each group: cap per-room placements at ceil(remaining / roomCount) so
+ * the bucket stays distributed instead of dominating room 1.
+ */
 function fillBucketIntoExistingRooms(
   bucket: ExamBucket,
   rooms: RoomSlot[],
@@ -176,16 +196,19 @@ function fillBucketIntoExistingRooms(
   startRoom = 0
 ): void {
   for (const group of groupOrder) {
-    for (let roomIndex = startRoom; roomIndex < rooms.length && bucket.students.length > 0; roomIndex += 1) {
-      const room = rooms[roomIndex];
-      if (!canPlaceExamCodeInGroup(room, bucket.examCode, group)) continue;
-
-      const placed = placeIntoGroup(room, group, bucket, groupCapacity);
-      if (placed > 0) {
-        bucket.startRoom ??= roomIndex;
-      }
-    }
     if (bucket.students.length === 0) return;
+    const roomCount = Math.max(1, rooms.length - startRoom);
+    const perRoom = Math.max(1, Math.ceil(bucket.students.length / roomCount));
+
+    // Pass 1: capped distribution
+    for (let roomIndex = startRoom; roomIndex < rooms.length && bucket.students.length > 0; roomIndex += 1) {
+      const placed = placeIntoGroupCapped(rooms[roomIndex], group, bucket, groupCapacity, perRoom);
+      if (placed > 0) bucket.startRoom ??= roomIndex;
+    }
+    // Pass 2: greedy fill leftover capacity in this group
+    for (let roomIndex = startRoom; roomIndex < rooms.length && bucket.students.length > 0; roomIndex += 1) {
+      placeIntoGroup(rooms[roomIndex], group, bucket, groupCapacity);
+    }
   }
 }
 
