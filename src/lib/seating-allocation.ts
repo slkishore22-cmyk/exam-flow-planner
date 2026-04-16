@@ -148,10 +148,14 @@ function getExamGroupsInRoom(room: RoomSlot, examCode: string): GroupLabel[] {
   return GROUPS.filter((group) => room.assigned[group].some((student) => student.examCode === examCode));
 }
 
-function canPlaceExamCodeInGroup(_room: RoomSlot, _examCode: string, _group: GroupLabel): boolean {
-  // Same exam code is allowed in any group within the same room.
-  // Adjacency violations are resolved later by fixViolations.
-  return true;
+function canPlaceExamCodeInGroup(room: RoomSlot, examCode: string, group: GroupLabel): boolean {
+  const occupiedGroups = getExamGroupsInRoom(room, examCode);
+  if (occupiedGroups.length === 0) return true;
+
+  return occupiedGroups.every(
+    (occupiedGroup) =>
+      SAME_CODE_COMPATIBILITY[occupiedGroup].includes(group) && SAME_CODE_COMPATIBILITY[group].includes(occupiedGroup)
+  );
 }
 
 function placeIntoGroup(
@@ -168,84 +172,51 @@ function placeIntoGroup(
   return take;
 }
 
-function placeIntoGroupCapped(
-  room: RoomSlot,
-  group: GroupLabel,
-  bucket: ExamBucket,
-  groupCapacity: Record<GroupLabel, number>,
-  cap: number
-): number {
-  const remaining = getGroupRemaining(room, group, groupCapacity);
-  const take = Math.min(remaining, bucket.students.length, cap);
-  if (take <= 0) return 0;
-  room.assigned[group].push(...bucket.students.splice(0, take));
-  bucket.assignedGroup ??= group;
-  return take;
-}
-
-/**
- * Spread a bucket evenly across rooms, group-by-group in priority order.
- * For each group: cap per-room placements at ceil(remaining / roomCount) so
- * the bucket stays distributed instead of dominating room 1.
- */
-function fillBucketIntoExistingRooms(
-  bucket: ExamBucket,
-  rooms: RoomSlot[],
-  groupOrder: readonly GroupLabel[],
-  groupCapacity: Record<GroupLabel, number>,
-  startRoom = 0
-): void {
-  for (const group of groupOrder) {
-    if (bucket.students.length === 0) return;
-    const roomCount = Math.max(1, rooms.length - startRoom);
-    const perRoom = Math.max(1, Math.ceil(bucket.students.length / roomCount));
-
-    // Pass 1: capped distribution
-    for (let roomIndex = startRoom; roomIndex < rooms.length && bucket.students.length > 0; roomIndex += 1) {
-      const placed = placeIntoGroupCapped(rooms[roomIndex], group, bucket, groupCapacity, perRoom);
-      if (placed > 0) bucket.startRoom ??= roomIndex;
-    }
-    // Pass 2: greedy fill leftover capacity in this group
-    for (let roomIndex = startRoom; roomIndex < rooms.length && bucket.students.length > 0; roomIndex += 1) {
-      placeIntoGroup(rooms[roomIndex], group, bucket, groupCapacity);
-    }
-  }
-}
-
-function fillBucketWithExpansion(
+function fillBucketAcrossRooms(
   bucket: ExamBucket,
   rooms: RoomSlot[],
   groupOrder: readonly GroupLabel[],
   groupCapacity: Record<GroupLabel, number>,
   startRoom: number
 ): number {
-  let cursor = startRoom;
+  let nextCursor = startRoom;
+  let lastUsedRoom = startRoom - 1;
 
   while (bucket.students.length > 0) {
-    const before = bucket.students.length;
+    let progress = false;
 
     for (let roomIndex = startRoom; roomIndex < rooms.length && bucket.students.length > 0; roomIndex += 1) {
       const room = rooms[roomIndex];
-      let used = false;
+      let usedThisRoom = false;
+
       for (const group of groupOrder) {
         if (bucket.students.length === 0) break;
         if (!canPlaceExamCodeInGroup(room, bucket.examCode, group)) continue;
+
         const placed = placeIntoGroup(room, group, bucket, groupCapacity);
-        if (placed > 0) {
-          used = true;
-          bucket.startRoom ??= roomIndex;
-        }
+        if (placed <= 0) continue;
+
+        progress = true;
+        usedThisRoom = true;
+        bucket.startRoom ??= roomIndex;
+        lastUsedRoom = Math.max(lastUsedRoom, roomIndex);
       }
-      if (used) cursor = Math.max(cursor, roomIndex + 1);
+
+      if (usedThisRoom) {
+        nextCursor = Math.max(nextCursor, roomIndex + 1);
+      }
     }
 
     if (bucket.students.length === 0) break;
-    if (bucket.students.length === before) {
+
+    if (!progress || lastUsedRoom >= rooms.length - 1) {
+      ensureRoomExists(rooms, rooms.length);
+    } else {
       ensureRoomExists(rooms, rooms.length);
     }
   }
 
-  return cursor;
+  return Math.max(nextCursor, lastUsedRoom + 1, startRoom);
 }
 
 function hasViolation(grid: (StudentRecord | null)[][], row: number, col: number): boolean {
@@ -381,24 +352,16 @@ export function allocateRooms(students: StudentRecord[], config: RoomConfig): Al
   let primaryCursor = 0;
   primaryBuckets.forEach((bucket, index) => {
     const groupOrder = index % 2 === 0 ? (['A', 'B'] as const) : (['B', 'A'] as const);
-    primaryCursor = fillBucketWithExpansion(bucket, rooms, groupOrder, groupCapacity, primaryCursor);
+    primaryCursor = fillBucketAcrossRooms(bucket, rooms, groupOrder, groupCapacity, primaryCursor);
   });
 
-  // Middle buckets: fill C/D first, then A/B, only inside existing rooms
   middleBuckets.forEach((bucket, index) => {
     const groupOrder = index % 2 === 0 ? (['C', 'D', 'A', 'B'] as const) : (['D', 'C', 'B', 'A'] as const);
-    fillBucketIntoExistingRooms(bucket, rooms, groupOrder, groupCapacity, 0);
-    if (bucket.students.length > 0) {
-      fillBucketWithExpansion(bucket, rooms, groupOrder, groupCapacity, 0);
-    }
+    fillBucketAcrossRooms(bucket, rooms, groupOrder, groupCapacity, 0);
   });
 
-  // Small buckets: fillers for any remaining gaps
   smallBuckets.forEach((bucket) => {
-    fillBucketIntoExistingRooms(bucket, rooms, ['D', 'C', 'A', 'B'], groupCapacity, 0);
-    if (bucket.students.length > 0) {
-      fillBucketWithExpansion(bucket, rooms, ['D', 'C', 'A', 'B'], groupCapacity, 0);
-    }
+    fillBucketAcrossRooms(bucket, rooms, ['D', 'C', 'A', 'B'], groupCapacity, 0);
   });
 
   const roomAllocations = buildRoomAllocations(rooms, rows, totalCols, groupPositions).filter(
