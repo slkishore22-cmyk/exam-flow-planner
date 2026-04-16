@@ -335,6 +335,8 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       {/* Print-only: all rooms */}
       <div ref={printRef} className="hidden print:block print-container">
         {rooms.map((room, roomIdx) => {
+          const isGeneral = room.isGeneralExam;
+          const effectiveSeatsPerCol = isGeneral ? 2 : config.seatsPerColumn;
           const summaryMap = new Map<string, { dept: string; code: string; count: number }>();
           room.students.forEach(s => {
             const key = `${s.department}|${s.examCode}`;
@@ -348,6 +350,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '2px solid #000', paddingBottom: 8 }}>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>
                   Room No: <span style={{ display: 'inline-block', width: 120, borderBottom: '1px solid #000' }}>&nbsp;</span>
+                  {isGeneral && <span style={{ fontSize: 10, marginLeft: 8, color: '#856404' }}>(General Exam)</span>}
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>
                   Date: <span style={{ display: 'inline-block', width: 140, borderBottom: '1px solid #000' }}>&nbsp;</span>
@@ -360,9 +363,9 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                     {Array.from({ length: config.mainColumns }).map((_, mc) => (
                       <React.Fragment key={mc}>
                         <th style={{ border: '1px solid #000', padding: '3px 2px', fontSize: 10, fontWeight: 700, textAlign: 'center', width: 28, backgroundColor: '#f0f0f0' }}>S.No</th>
-                        {Array.from({ length: config.seatsPerColumn }).map((_, sc) => (
+                        {Array.from({ length: effectiveSeatsPerCol }).map((_, sc) => (
                           <th key={sc} style={{ border: '1px solid #000', padding: '3px 4px', fontSize: 10, fontWeight: 700, textAlign: 'center', backgroundColor: '#f0f0f0' }}>
-                            S{mc * config.seatsPerColumn + sc + 1}
+                            S{mc * effectiveSeatsPerCol + sc + 1}
                           </th>
                         ))}
                         {mc < config.mainColumns - 1 && <th style={{ width: 8, border: 'none' }} />}
@@ -378,8 +381,8 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                         return (
                           <React.Fragment key={mc}>
                             <td style={{ border: '1px solid #000', padding: '2px', fontSize: 10, fontWeight: 700, textAlign: 'center', backgroundColor: '#f0f0f0' }}>{seatNumber}</td>
-                            {Array.from({ length: config.seatsPerColumn }).map((_, sc) => {
-                              const colIdx = mc * config.seatsPerColumn + sc;
+                            {Array.from({ length: effectiveSeatsPerCol }).map((_, sc) => {
+                              const colIdx = mc * effectiveSeatsPerCol + sc;
                               const student = row[colIdx];
                               const color = student ? getExamCodeColor(student.examCode) : null;
                               return (
