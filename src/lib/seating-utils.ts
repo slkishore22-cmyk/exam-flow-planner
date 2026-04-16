@@ -520,39 +520,50 @@ export function allocateRooms(
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     const roomStudents: StudentRecord[] = [];
 
+    // Track all codes placed by each lane in this room
+    const placedCodesA = new Set<string>();
+    const placedCodesB = new Set<string>();
+    const placedCodesD = new Set<string>();
+    const placedCodesC = new Set<string>();
+
     const lanePlans: Array<{
       actualGroup: GroupLabel;
       getExcludedCodes: () => string[];
       lane: LaneState;
       positions: [number, number][];
+      placedCodes: Set<string>;
     }> = [
       {
         lane: laneA,
         positions: [...groupPositions['A']],
         actualGroup: 'A',
-        getExcludedCodes: () => [laneB.currentBucket?.examCode, laneD.currentBucket?.examCode, laneC.currentBucket?.examCode].filter(Boolean) as string[],
+        placedCodes: placedCodesA,
+        getExcludedCodes: () => [...placedCodesB, ...placedCodesD, ...placedCodesC],
       },
       {
         lane: laneB,
         positions: [...groupPositions['B']],
         actualGroup: 'B',
-        getExcludedCodes: () => [laneA.currentBucket?.examCode, laneD.currentBucket?.examCode, laneC.currentBucket?.examCode].filter(Boolean) as string[],
+        placedCodes: placedCodesB,
+        getExcludedCodes: () => [...placedCodesA, ...placedCodesD, ...placedCodesC],
       },
       {
         lane: laneD,
         positions: roomIndex % 2 === 0 ? [...evenRowPositions] : [...oddRowPositions],
         actualGroup: roomIndex % 2 === 0 ? 'D' : 'C',
-        getExcludedCodes: () => [laneA.currentBucket?.examCode, laneB.currentBucket?.examCode, laneC.currentBucket?.examCode].filter(Boolean) as string[],
+        placedCodes: placedCodesD,
+        getExcludedCodes: () => [...placedCodesA, ...placedCodesB, ...placedCodesC],
       },
       {
         lane: laneC,
         positions: roomIndex % 2 === 0 ? [...oddRowPositions] : [...evenRowPositions],
         actualGroup: roomIndex % 2 === 0 ? 'C' : 'D',
-        getExcludedCodes: () => [laneA.currentBucket?.examCode, laneB.currentBucket?.examCode, laneD.currentBucket?.examCode].filter(Boolean) as string[],
+        placedCodes: placedCodesC,
+        getExcludedCodes: () => [...placedCodesA, ...placedCodesB, ...placedCodesD],
       },
     ];
 
-    for (const { lane, positions, actualGroup, getExcludedCodes } of lanePlans) {
+    for (const { lane, positions, actualGroup, getExcludedCodes, placedCodes } of lanePlans) {
       const laneStudents = takeLaneStudents(
         positions,
         lane,
@@ -560,6 +571,8 @@ export function allocateRooms(
         rankedBuckets,
         new Set(getExcludedCodes())
       );
+      // Track which codes this lane placed
+      for (const s of laneStudents) placedCodes.add(s.examCode);
       fillPositions(positions, laneStudents, grid, roomStudents);
     }
 
