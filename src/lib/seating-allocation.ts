@@ -172,51 +172,61 @@ function placeIntoGroup(
   return take;
 }
 
-function fillBucketAcrossRooms(
+function fillBucketIntoExistingRooms(
+  bucket: ExamBucket,
+  rooms: RoomSlot[],
+  groupOrder: readonly GroupLabel[],
+  groupCapacity: Record<GroupLabel, number>,
+  startRoom = 0
+): void {
+  for (const group of groupOrder) {
+    for (let roomIndex = startRoom; roomIndex < rooms.length && bucket.students.length > 0; roomIndex += 1) {
+      const room = rooms[roomIndex];
+      if (!canPlaceExamCodeInGroup(room, bucket.examCode, group)) continue;
+
+      const placed = placeIntoGroup(room, group, bucket, groupCapacity);
+      if (placed > 0) {
+        bucket.startRoom ??= roomIndex;
+      }
+    }
+    if (bucket.students.length === 0) return;
+  }
+}
+
+function fillBucketWithExpansion(
   bucket: ExamBucket,
   rooms: RoomSlot[],
   groupOrder: readonly GroupLabel[],
   groupCapacity: Record<GroupLabel, number>,
   startRoom: number
 ): number {
-  let nextCursor = startRoom;
-  let lastUsedRoom = startRoom - 1;
+  let cursor = startRoom;
 
   while (bucket.students.length > 0) {
-    let progress = false;
+    const before = bucket.students.length;
 
     for (let roomIndex = startRoom; roomIndex < rooms.length && bucket.students.length > 0; roomIndex += 1) {
       const room = rooms[roomIndex];
-      let usedThisRoom = false;
-
+      let used = false;
       for (const group of groupOrder) {
         if (bucket.students.length === 0) break;
         if (!canPlaceExamCodeInGroup(room, bucket.examCode, group)) continue;
-
         const placed = placeIntoGroup(room, group, bucket, groupCapacity);
-        if (placed <= 0) continue;
-
-        progress = true;
-        usedThisRoom = true;
-        bucket.startRoom ??= roomIndex;
-        lastUsedRoom = Math.max(lastUsedRoom, roomIndex);
+        if (placed > 0) {
+          used = true;
+          bucket.startRoom ??= roomIndex;
+        }
       }
-
-      if (usedThisRoom) {
-        nextCursor = Math.max(nextCursor, roomIndex + 1);
-      }
+      if (used) cursor = Math.max(cursor, roomIndex + 1);
     }
 
     if (bucket.students.length === 0) break;
-
-    if (!progress || lastUsedRoom >= rooms.length - 1) {
-      ensureRoomExists(rooms, rooms.length);
-    } else {
+    if (bucket.students.length === before) {
       ensureRoomExists(rooms, rooms.length);
     }
   }
 
-  return Math.max(nextCursor, lastUsedRoom + 1, startRoom);
+  return cursor;
 }
 
 function hasViolation(grid: (StudentRecord | null)[][], row: number, col: number): boolean {
