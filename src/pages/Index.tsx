@@ -12,6 +12,7 @@ import {
   GroupRanking,
   deduplicateStudents,
   allocateRooms,
+  resetExamCodeColors,
 } from '@/lib/seating-utils';
 
 const Index = () => {
@@ -41,6 +42,7 @@ const Index = () => {
 
   const handleGenerate = (config: RoomConfig) => {
     setRoomConfig(config);
+    resetExamCodeColors();
     const result = allocateRooms([...students], config);
     setRooms(result.rooms);
     setGroupRankings(result.groupRankings);
@@ -54,6 +56,7 @@ const Index = () => {
     const newStudentsPerRoom = Math.ceil(students.length / newRoomCount);
     const newConfig = { ...roomConfig, studentsPerRoom: newStudentsPerRoom };
     setRoomConfig(newConfig);
+    resetExamCodeColors();
     const result = allocateRooms([...students], newConfig);
     setRooms(result.rooms);
     setGroupRankings(result.groupRankings);
