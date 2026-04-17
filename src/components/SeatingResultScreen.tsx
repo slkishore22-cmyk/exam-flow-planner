@@ -154,7 +154,8 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 const isOccupied = student !== null;
                 const isVisible = forPrint ? true : (isOccupied && visibleExamCodes.has(student!.examCode));
                 const isViolation = violations?.violatedCells.has(`${rowIdx}-${colIdx}`);
-                const seatLabel = isGeneral ? 'A' : getSeatTypeLabel(rowIdx, colIdx, seatsPerColumn);
+                const generalGroup: 'A' | 'B' = sc % 2 === 0 ? 'A' : 'B';
+                const seatLabel = isGeneral ? generalGroup : getSeatTypeLabel(rowIdx, colIdx, seatsPerColumn);
 
                 let cellContent: React.ReactNode;
                 let cellBg: string;
@@ -162,7 +163,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
 
                 if (!isOccupied) {
                   // Empty seat — colorless cell with small group label (A/B/C/D)
-                  const group = isGeneral ? 'A' : getGroupLabel(rowIdx, colIdx, seatsPerColumn);
+                  const group = isGeneral ? generalGroup : getGroupLabel(rowIdx, colIdx, seatsPerColumn);
                   cellBg = 'hsl(var(--background))';
                   cellBorder = '1px solid hsl(var(--border))';
                   cellContent = (
