@@ -5,6 +5,7 @@ export interface StudentRecord {
   department: string;
   examCode: string;
   sourcePdf: string;
+  isGeneral?: boolean;
 }
 
 export interface PdfExtractionResult {
