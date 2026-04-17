@@ -41,7 +41,7 @@ const Index = () => {
 
   const handleGenerate = (config: RoomConfig) => {
     setRoomConfig(config);
-    const result = allocateRooms([...students], config);
+    const result = allocateSeating([...students], config);
     setRooms(result.rooms);
     setPatternDecision(result.patternDecision);
     setCurrentStep(4);
