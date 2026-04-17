@@ -67,19 +67,58 @@ function buildRoomSlots(rows: number, mainCols: number, subCols: number): RoomSl
   return slots;
 }
 
-// NOTE: General-exam seating logic has been removed. A new system will be
-// designed from scratch. For now, students flagged `isGeneral` are excluded
-// from normal allocation and produce no rooms.
+const GENERAL_SEATS_PER_ROOM = 30;
+const GENERAL_ROWS = 5;
+const GENERAL_MAIN_COLS = 3;
+const GENERAL_SEATS_PER_COL = 2;
+
+function buildGeneralRooms(
+  generalStudents: StudentRecord[],
+  startingRoomNumber: number
+): RoomAllocation[] {
+  const sorted = [...generalStudents].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
+  const totalCols = GENERAL_MAIN_COLS * GENERAL_SEATS_PER_COL; // 6
+  const roomsNeeded = Math.ceil(sorted.length / GENERAL_SEATS_PER_ROOM);
+  const rooms: RoomAllocation[] = [];
+
+  for (let i = 0; i < roomsNeeded; i++) {
+    const grid: (StudentRecord | null)[][] = Array.from(
+      { length: GENERAL_ROWS },
+      () => Array(totalCols).fill(null)
+    );
+    const slice = sorted.slice(i * GENERAL_SEATS_PER_ROOM, (i + 1) * GENERAL_SEATS_PER_ROOM);
+    // Fill row-major, left-to-right, top-to-bottom
+    let idx = 0;
+    for (let r = 0; r < GENERAL_ROWS && idx < slice.length; r++) {
+      for (let c = 0; c < totalCols && idx < slice.length; c++) {
+        grid[r][c] = slice[idx++];
+      }
+    }
+    rooms.push({
+      roomNumber: startingRoomNumber + i,
+      students: slice,
+      grid,
+      totalRows: GENERAL_ROWS,
+      seatsPerRow: totalCols,
+      isGeneral: true,
+      mainColumns: GENERAL_MAIN_COLS,
+      seatsPerColumn: GENERAL_SEATS_PER_COL,
+    });
+  }
+
+  return rooms;
+}
 
 export function allocateSeating(
   students: StudentRecord[],
   config: RoomConfig
 ): AllocationResult {
-  // General-exam students are set aside — no rooms are produced for them yet.
+  // Split off general-exam students — they get dedicated rooms first.
+  const generalStudents = students.filter((s) => s.isGeneral);
   const normalStudents = students.filter((s) => !s.isGeneral);
 
-  const generalRooms: RoomAllocation[] = [];
-  const normalStartingRoomNumber = 1;
+  const generalRooms = buildGeneralRooms(generalStudents, 1);
+  const normalStartingRoomNumber = generalRooms.length + 1;
 
   const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
   const totalCols = mainColumns * seatsPerColumn;
