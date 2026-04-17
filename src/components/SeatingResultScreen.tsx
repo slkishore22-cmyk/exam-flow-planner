@@ -66,10 +66,12 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const visibleStudentsAll = rooms.reduce((sum, r) => sum + r.students.filter(s => visibleExamCodes.has(s.examCode)).length, 0);
   const progress = totalStudentsAll > 0 ? Math.round((visibleStudentsAll / totalStudentsAll) * 100) : 0;
 
-  // Compute violations per room
+  // Compute violations per room — skipped entirely for general-exam rooms
+  // since same-code adjacency is expected/allowed there.
   const roomViolations = useMemo(() => {
     return rooms.map(room => {
       const violatedCells = new Set<string>();
+      if (room.isGeneral) return { count: 0, violatedCells };
       const totalRows = room.grid.length;
       const totalCols = room.grid[0]?.length || 0;
       let count = 0;
