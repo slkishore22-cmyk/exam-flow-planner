@@ -1,6 +1,13 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor } from '@/lib/seating-utils';
+import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor, getGroupLabel } from '@/lib/seating-utils';
+
+const GROUP_COLORS: Record<'A' | 'B' | 'C' | 'D', { bg: string; text: string }> = {
+  A: { bg: '#FEF3C7', text: '#92400E' },
+  B: { bg: '#DBEAFE', text: '#1E40AF' },
+  C: { bg: '#DCFCE7', text: '#166534' },
+  D: { bg: '#FCE7F3', text: '#9D174D' },
+};
 
 interface SeatingResultScreenProps {
   rooms: RoomAllocation[];
@@ -142,10 +149,14 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 let cellBorder: string;
 
                 if (!isOccupied) {
-                  // Truly empty seat
-                  cellBg = 'hsl(var(--muted))';
+                  // Empty seat — show group label (A/B/C/D) with group color
+                  const group = getGroupLabel(rowIdx, colIdx, config.seatsPerColumn);
+                  const gc = GROUP_COLORS[group];
+                  cellBg = gc.bg;
                   cellBorder = '2px solid white';
-                  cellContent = <span className="text-muted-foreground text-xs">—</span>;
+                  cellContent = (
+                    <span style={{ color: gc.text, fontWeight: 700, fontSize: 18 }}>{group}</span>
+                  );
                 } else if (!isVisible && showReveal) {
                   // Occupied but hidden — show placeholder with seat label
                   cellBg = 'hsl(var(--muted))';

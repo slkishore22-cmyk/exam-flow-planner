@@ -234,6 +234,25 @@ export function interleaveStudents(students: StudentRecord[]): StudentRecord[] {
   return result;
 }
 
+/**
+ * Returns the group label (A | B | C | D) for a given seat position.
+ *
+ * Pattern (within each main column of `subCols` seats, repeating every 3):
+ *   Odd-indexed rows  (0, 2, 4, ...) → A | C | B
+ *   Even-indexed rows (1, 3, 5, ...) → B | D | A
+ */
+export function getGroupLabel(
+  row: number,
+  col: number,
+  subCols: number
+): 'A' | 'B' | 'C' | 'D' {
+  const sc = col % subCols;
+  const isOddRow = row % 2 === 0;
+  const oddPattern: ('A' | 'B' | 'C' | 'D')[] = ['A', 'C', 'B'];
+  const evenPattern: ('A' | 'B' | 'C' | 'D')[] = ['B', 'D', 'A'];
+  return isOddRow ? oddPattern[sc % 3] : evenPattern[sc % 3];
+}
+
 export function allocateRooms(
   students: StudentRecord[],
   config: RoomConfig
