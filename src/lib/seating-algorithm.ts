@@ -257,9 +257,14 @@ export function allocateSeating(
     return true;
   };
 
-  // Track next fresh room cursor for A and B queues
-  let nextFreshA = 0;
-  let nextFreshB = 0;
+  // Find the next room where the given group is still empty (used count = 0).
+  // This prevents skipping rooms that another code's overflow may have left untouched.
+  const findNextFreshRoom = (group: 'A' | 'B', startFrom: number): number => {
+    const used = group === 'A' ? usedA : usedB;
+    let i = startFrom;
+    while (i < roomsNeeded && used[i] !== 0) i++;
+    return i;
+  };
 
   // Alternating A/B fill with biggest codes.
   // Each code starts on a fresh room in its target group, but departments
@@ -275,7 +280,8 @@ export function allocateSeating(
     departments: { department: string; students: StudentRecord[] }[]
   ) => {
     const groupSize = group === 'A' ? groupASize : groupBSize;
-    let cursor = group === 'A' ? nextFreshA : nextFreshB;
+    // Always start at the next ACTUALLY-empty room in this group, not a stale cursor.
+    let cursor = findNextFreshRoom(group, 0);
     let deptIndex = 0;
     let studentIndex = 0;
 
@@ -301,11 +307,9 @@ export function allocateSeating(
         }
       }
 
-      cursor++;
+      // Move to the next empty room of this group (skip rooms already used).
+      cursor = findNextFreshRoom(group, cursor + 1);
     }
-
-    if (group === 'A') nextFreshA = cursor;
-    else nextFreshB = cursor;
 
     return departments.slice(deptIndex).map((department, index) => ({
       department: department.department,
