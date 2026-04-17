@@ -192,44 +192,28 @@ export function deduplicateStudents(
 
 type GroupLabel = 'A' | 'B' | 'C' | 'D';
 
-interface ExamBucket {
-  rank: number;
-  examCode: string;
-  totalStudents: number;
-  students: StudentRecord[];
-  preferredGroup: GroupLabel;
-  assignedGroup: GroupLabel | null;
-}
-
-interface LaneState {
-  currentBucket: ExamBucket | null;
-  preferredGroup: GroupLabel;
-  allowUntouchedBorrow: boolean;
-  allowExcludedFallback: boolean;
-}
-
-const GROUP_CYCLE: GroupLabel[] = ['A', 'B', 'D', 'C'];
-
 /**
  * For a 5×9 grid (3 panels × 3 sub-cols), returns the group label for each cell.
  * 
  * Pattern per panel:
  *   Col:  1  2  3
- *   R1:   A  C  B
- *   R2:   B  D  A
- *   R3:   A  C  B
- *   R4:   B  D  A
- *   R5:   A  C  B
+ *   R1:   A  C  A
+ *   R2:   B  D  B
+ *   R3:   A  C  A
+ *   R4:   B  D  B
+ *   R5:   A  C  A
  */
 function getGroupForCell(row: number, col: number): GroupLabel {
-  const subCol = col % 3;
+  const subCol = col % 3; // 0, 1, 2 within a panel
   const isOddDisplayRow = row % 2 === 0; // rows 0,2,4
 
   if (isOddDisplayRow) {
+    // A C B pattern
     if (subCol === 0) return 'A';
     if (subCol === 1) return 'C';
     return 'B';
   } else {
+    // B D A pattern
     if (subCol === 0) return 'B';
     if (subCol === 1) return 'D';
     return 'A';
@@ -253,123 +237,14 @@ function buildGroupPositions(rows: number, totalCols: number): Record<GroupLabel
 }
 
 /**
- * Build middle column positions split by row parity.
- * oddRowPositions = S2 on rows 0,2,4 (C group rows) — 9 seats
- * evenRowPositions = S2 on rows 1,3 (D group rows) — 6 seats
+ * Rank exam codes by student count descending. A=largest, B=2nd, Middle(C+D)=rest.
  */
-function buildMiddlePositionsByParity(rows: number, mainColumns: number, seatsPerColumn: number): {
-  oddRowPositions: [number, number][];  // rows 0,2,4
-  evenRowPositions: [number, number][]; // rows 1,3
+function rankExamCodes(students: StudentRecord[]): {
+  rankings: GroupRanking[];
+  queueA: StudentRecord[];
+  queueB: StudentRecord[];
+  queueMiddle: StudentRecord[];
 } {
-  const oddRowPositions: [number, number][] = [];
-  const evenRowPositions: [number, number][] = [];
-
-  for (let mc = 0; mc < mainColumns; mc++) {
-    const s2 = mc * seatsPerColumn + 1; // middle sub-column
-    for (let r = 0; r < rows; r++) {
-      if (r % 2 === 0) {
-        oddRowPositions.push([r, s2]);
-      } else {
-        evenRowPositions.push([r, s2]);
-      }
-    }
-  }
-
-  return { oddRowPositions, evenRowPositions };
-}
-
-function fillPositions(
-  positions: [number, number][],
-  source: StudentRecord[],
-  grid: (StudentRecord | null)[][],
-  roomStudents: StudentRecord[]
-) {
-  for (const [row, col] of positions) {
-    if (source.length === 0) break;
-    const student = source.shift()!;
-    grid[row][col] = student;
-    roomStudents.push(student);
-  }
-}
-
-/**
- * Post-processing: swap students within a room's grid to eliminate adjacency violations.
- * Tries up to maxPasses full scans. Each violation found triggers a search for a safe swap partner.
- */
-function fixViolations(grid: (StudentRecord | null)[][], rows: number, totalCols: number, maxPasses = 20) {
-  for (let pass = 0; pass < maxPasses; pass++) {
-    let fixed = false;
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < totalCols; c++) {
-        const cell = grid[r][c];
-        if (!cell) continue;
-
-        if (!hasAdjacentViolation(grid, r, c, rows, totalCols)) continue;
-
-        // Find a swap partner that resolves this violation without creating new ones
-        const swapped = findAndSwap(grid, r, c, rows, totalCols);
-        if (swapped) fixed = true;
-      }
-    }
-
-    if (!fixed) break; // No more violations fixable
-  }
-}
-
-function hasAdjacentViolation(grid: (StudentRecord | null)[][], r: number, c: number, rows: number, totalCols: number): boolean {
-  const code = grid[r][c]?.examCode;
-  if (!code) return false;
-  if (c + 1 < totalCols && grid[r][c + 1]?.examCode === code) return true;
-  if (c - 1 >= 0 && grid[r][c - 1]?.examCode === code) return true;
-  if (r + 1 < rows && grid[r + 1]?.[c]?.examCode === code) return true;
-  if (r - 1 >= 0 && grid[r - 1]?.[c]?.examCode === code) return true;
-  return false;
-}
-
-function wouldCauseViolation(grid: (StudentRecord | null)[][], r: number, c: number, examCode: string, rows: number, totalCols: number): boolean {
-  if (c + 1 < totalCols && grid[r][c + 1]?.examCode === examCode) return true;
-  if (c - 1 >= 0 && grid[r][c - 1]?.examCode === examCode) return true;
-  if (r + 1 < rows && grid[r + 1]?.[c]?.examCode === examCode) return true;
-  if (r - 1 >= 0 && grid[r - 1]?.[c]?.examCode === examCode) return true;
-  return false;
-}
-
-function findAndSwap(grid: (StudentRecord | null)[][], r1: number, c1: number, rows: number, totalCols: number): boolean {
-  const cellA = grid[r1][c1]!;
-
-  for (let r2 = 0; r2 < rows; r2++) {
-    for (let c2 = 0; c2 < totalCols; c2++) {
-      if (r2 === r1 && c2 === c1) continue;
-      const cellB = grid[r2][c2];
-      if (!cellB) continue;
-      if (cellB.examCode === cellA.examCode) continue; // Same code swap is useless
-
-      // Check if swapping would fix violations without creating new ones
-      // Temporarily swap
-      grid[r1][c1] = cellB;
-      grid[r2][c2] = cellA;
-
-      const aOk = !hasAdjacentViolation(grid, r1, c1, rows, totalCols);
-      const bOk = !hasAdjacentViolation(grid, r2, c2, rows, totalCols);
-
-      if (aOk && bOk) {
-        return true; // Swap is good, keep it
-      }
-
-      // Revert
-      grid[r1][c1] = cellA;
-      grid[r2][c2] = cellB;
-    }
-  }
-
-  return false;
-}
-
-/**
- * Rank exam codes by student count descending.
- */
-function rankExamCodes(students: StudentRecord[]): ExamBucket[] {
   const countMap: Record<string, StudentRecord[]> = {};
   for (const s of students) {
     if (!countMap[s.examCode]) countMap[s.examCode] = [];
@@ -386,92 +261,33 @@ function rankExamCodes(students: StudentRecord[]): ExamBucket[] {
   }
 
   const sorted = Object.entries(countMap).sort((a, b) => b[1].length - a[1].length);
-  return sorted.map(([code, studs], index) => ({
-    rank: index + 1,
-    examCode: code,
-    totalStudents: studs.length,
-    students: [...studs],
-    preferredGroup: GROUP_CYCLE[index % GROUP_CYCLE.length],
-    assignedGroup: null,
-  }));
-}
+  const rankings: GroupRanking[] = [];
+  const queueA: StudentRecord[] = [];
+  const queueB: StudentRecord[] = [];
+  const queueMiddle: StudentRecord[] = [];
 
-function assignBucketGroup(bucket: ExamBucket, group: GroupLabel) {
-  if (bucket.assignedGroup === null) {
-    bucket.assignedGroup = group;
-  }
-}
-
-function pickBucketForLane(
-  buckets: ExamBucket[],
-  lane: LaneState,
-  excludedExamCodes: Set<string>
-): ExamBucket | null {
-  const strategies: Array<(bucket: ExamBucket) => boolean> = [
-    (bucket) => bucket.students.length > 0 && bucket.preferredGroup === lane.preferredGroup && !excludedExamCodes.has(bucket.examCode),
-    (bucket) => bucket.students.length > 0 && bucket.assignedGroup !== null && !excludedExamCodes.has(bucket.examCode),
-  ];
-
-  if (lane.allowUntouchedBorrow) {
-    strategies.push((bucket) => bucket.students.length > 0 && bucket.assignedGroup === null && !excludedExamCodes.has(bucket.examCode));
+  for (let i = 0; i < sorted.length; i++) {
+    const [code, studs] = sorted[i];
+    let group: GroupLabel;
+    if (i === 0) {
+      group = 'A';
+      queueA.push(...studs);
+    } else if (i === 1) {
+      group = 'B';
+      queueB.push(...studs);
+    } else {
+      group = i % 2 === 0 ? 'D' : 'C';
+      queueMiddle.push(...studs);
+    }
+    rankings.push({
+      rank: i + 1,
+      group,
+      examCode: code,
+      totalStudents: studs.length,
+    });
   }
 
-  if (lane.allowExcludedFallback) {
-    strategies.push(
-      (bucket) => bucket.students.length > 0 && bucket.preferredGroup === lane.preferredGroup,
-      (bucket) => bucket.students.length > 0 && bucket.assignedGroup !== null,
-    );
-
-    if (lane.allowUntouchedBorrow) {
-      strategies.push((bucket) => bucket.students.length > 0 && bucket.assignedGroup === null);
-    }
-
-    strategies.push((bucket) => bucket.students.length > 0);
-  }
-
-  for (const strategy of strategies) {
-    const bucket = buckets.find(strategy);
-    if (bucket) {
-      return bucket;
-    }
-  }
-
-  return null;
-}
-
-function takeLaneStudents(
-  positions: [number, number][],
-  lane: LaneState,
-  actualGroup: GroupLabel,
-  buckets: ExamBucket[],
-  excludedExamCodes: Set<string>
-): StudentRecord[] {
-  const laneStudents: StudentRecord[] = [];
-
-  while (laneStudents.length < positions.length) {
-    if (lane.currentBucket && lane.currentBucket.students.length === 0) {
-      lane.currentBucket = null;
-    }
-
-    if (!lane.currentBucket) {
-      lane.currentBucket = pickBucketForLane(buckets, lane, excludedExamCodes);
-    }
-
-    if (!lane.currentBucket) {
-      break;
-    }
-
-    assignBucketGroup(lane.currentBucket, actualGroup);
-
-    const needed = positions.length - laneStudents.length;
-    laneStudents.push(...lane.currentBucket.students.splice(0, needed));
-
-    if (lane.currentBucket.students.length === 0) {
-      lane.currentBucket = null;
-    }
-  }
-
-  return laneStudents;
+  return { rankings, queueA, queueB, queueMiddle };
 }
 
 export function allocateRooms(
@@ -481,121 +297,57 @@ export function allocateRooms(
   const { mainColumns, seatsPerColumn } = config;
   const totalCols = mainColumns * seatsPerColumn;
   const rows = 5;
+  const seatsPerRoom = rows * totalCols;
 
-  const rankedBuckets = rankExamCodes(students);
+  const { rankings, queueA, queueB, queueMiddle } = rankExamCodes(students);
+  const roomsNeeded = Math.ceil(students.length / seatsPerRoom);
   const groupPositions = buildGroupPositions(rows, totalCols);
-  const { oddRowPositions, evenRowPositions } = buildMiddlePositionsByParity(rows, mainColumns, seatsPerColumn);
-
-  const laneA: LaneState = {
-    currentBucket: null,
-    preferredGroup: 'A',
-    allowUntouchedBorrow: true,
-    allowExcludedFallback: true,
-  };
-  const laneB: LaneState = {
-    currentBucket: null,
-    preferredGroup: 'B',
-    allowUntouchedBorrow: true,
-    allowExcludedFallback: true,
-  };
-  const laneD: LaneState = {
-    currentBucket: null,
-    preferredGroup: 'D',
-    allowUntouchedBorrow: true,
-    allowExcludedFallback: false,
-  };
-  const laneC: LaneState = {
-    currentBucket: null,
-    preferredGroup: 'C',
-    allowUntouchedBorrow: true,
-    allowExcludedFallback: false,
-  };
 
   const rooms: RoomAllocation[] = [];
-  let roomIndex = 0;
 
-  const hasPending = () => rankedBuckets.some((bucket) => bucket.students.length > 0);
-
-  while (hasPending()) {
+  for (let r = 0; r < roomsNeeded; r++) {
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     const roomStudents: StudentRecord[] = [];
 
-    // Track all codes placed by each lane in this room
-    const placedCodesA = new Set<string>();
-    const placedCodesB = new Set<string>();
-    const placedCodesD = new Set<string>();
-    const placedCodesC = new Set<string>();
-
-    const lanePlans: Array<{
-      actualGroup: GroupLabel;
-      getExcludedCodes: () => string[];
-      lane: LaneState;
-      positions: [number, number][];
-      placedCodes: Set<string>;
-    }> = [
-      {
-        lane: laneA,
-        positions: [...groupPositions['A']],
-        actualGroup: 'A',
-        placedCodes: placedCodesA,
-        getExcludedCodes: () => [...placedCodesB, ...placedCodesD, ...placedCodesC],
-      },
-      {
-        lane: laneB,
-        positions: [...groupPositions['B']],
-        actualGroup: 'B',
-        placedCodes: placedCodesB,
-        getExcludedCodes: () => [...placedCodesA, ...placedCodesD, ...placedCodesC],
-      },
-      {
-        lane: laneD,
-        positions: roomIndex % 2 === 0 ? [...evenRowPositions] : [...oddRowPositions],
-        actualGroup: roomIndex % 2 === 0 ? 'D' : 'C',
-        placedCodes: placedCodesD,
-        getExcludedCodes: () => [...placedCodesA, ...placedCodesB, ...placedCodesC],
-      },
-      {
-        lane: laneC,
-        positions: roomIndex % 2 === 0 ? [...oddRowPositions] : [...evenRowPositions],
-        actualGroup: roomIndex % 2 === 0 ? 'C' : 'D',
-        placedCodes: placedCodesC,
-        getExcludedCodes: () => [...placedCodesA, ...placedCodesB, ...placedCodesD],
-      },
-    ];
-
-    for (const { lane, positions, actualGroup, getExcludedCodes, placedCodes } of lanePlans) {
-      const laneStudents = takeLaneStudents(
-        positions,
-        lane,
-        actualGroup,
-        rankedBuckets,
-        new Set(getExcludedCodes())
-      );
-      // Track which codes this lane placed
-      for (const s of laneStudents) placedCodes.add(s.examCode);
-      fillPositions(positions, laneStudents, grid, roomStudents);
+    // Fill A positions
+    for (const [row, col] of groupPositions['A']) {
+      if (queueA.length === 0) break;
+      const student = queueA.shift()!;
+      grid[row][col] = student;
+      roomStudents.push(student);
     }
 
-    // Post-process: swap students to fix any adjacency violations
-    fixViolations(grid, rows, totalCols);
+    // Fill B positions
+    for (const [row, col] of groupPositions['B']) {
+      if (queueB.length === 0) break;
+      const student = queueB.shift()!;
+      grid[row][col] = student;
+      roomStudents.push(student);
+    }
+
+    // Fill middle: D first then C, from ONE shared queue
+    // So an exam code flows from D in room 1 → C in room 2 continuously
+    for (const [row, col] of groupPositions['D']) {
+      if (queueMiddle.length === 0) break;
+      const student = queueMiddle.shift()!;
+      grid[row][col] = student;
+      roomStudents.push(student);
+    }
+    for (const [row, col] of groupPositions['C']) {
+      if (queueMiddle.length === 0) break;
+      const student = queueMiddle.shift()!;
+      grid[row][col] = student;
+      roomStudents.push(student);
+    }
 
     rooms.push({
-      roomNumber: roomIndex + 1,
+      roomNumber: r + 1,
       students: roomStudents,
       grid,
       totalRows: rows,
       seatsPerRow: totalCols,
     });
-
-    roomIndex++;
   }
-
-  const groupRankings: GroupRanking[] = rankedBuckets.map((bucket) => ({
-    rank: bucket.rank,
-    group: bucket.assignedGroup ?? bucket.preferredGroup,
-    examCode: bucket.examCode,
-    totalStudents: bucket.totalStudents,
-  }));
 
   // Count violations
   let violations = 0;
@@ -610,9 +362,5 @@ export function allocateRooms(
     }
   }
 
-  return {
-    rooms,
-    groupRankings: groupRankings.sort((a, b) => a.rank - b.rank),
-    violations,
-  };
+  return { rooms, groupRankings: rankings, violations };
 }
