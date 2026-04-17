@@ -284,36 +284,6 @@ export function getGroupLabel(
   return isOddRow ? oddPattern[sc % 3] : evenPattern[sc % 3];
 }
 
-export function allocateRooms(
-  students: StudentRecord[],
-  config: RoomConfig
-): AllocationResult {
-  const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
-  const totalCols = mainColumns * seatsPerColumn;
-  const rows = Math.ceil(studentsPerRoom / totalCols);
-  const total = students.length;
-  const roomsNeeded = Math.max(1, Math.ceil(total / studentsPerRoom));
+// allocateRooms has been moved to ./seating-algorithm.ts as `allocateSeating`.
+// Re-exported here for backwards compatibility via a thin wrapper in Index.tsx.
 
-  const rooms: RoomAllocation[] = [];
-  for (let r = 0; r < roomsNeeded; r++) {
-    const grid: (StudentRecord | null)[][] = Array.from(
-      { length: rows },
-      () => Array(totalCols).fill(null)
-    );
-    rooms.push({
-      roomNumber: r + 1,
-      students: [],
-      grid,
-      totalRows: rows,
-      seatsPerRow: totalCols,
-    });
-  }
-
-  const patternDecision: PatternDecision = {
-    pattern: 'CRISS_CROSS',
-    message: null,
-    violations: 0,
-  };
-
-  return { rooms, patternDecision };
-}
