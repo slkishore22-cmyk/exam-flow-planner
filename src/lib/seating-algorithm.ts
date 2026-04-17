@@ -10,9 +10,12 @@ import { StudentRecord, RoomConfig, RoomAllocation, AllocationResult, getGroupLa
  *    - 3rd biggest → Group A
  *    - 4th biggest → Group B
  *    - ...and so on.
- * 3. Each code consumes ceil(count / 15) consecutive FRESH rooms in its
+ * 3. Each 3-digit-count code consumes consecutive FRESH rooms in its
  *    assigned group's queue. A code NEVER starts mid-room — it always
  *    begins on a room where its target group is empty.
+ * 4. Inside a code, departments are ordered by size (largest first) and
+ *    placed CONTIGUOUSLY. When one department ends, the next department of
+ *    the SAME exam code may use the remaining seats in that same room/group.
  * 4. Groups C and D are intentionally left EMPTY in this phase.
  *    (Logic for filling middle/low-count codes will come later.)
  */
@@ -137,13 +140,15 @@ export function allocateSeating(
   let nextFreshB = 0;
 
   // Alternating A/B fill with biggest codes.
-  // Each department block inside a code starts on a fresh room only.
-  // If a department ends early, the remaining seats in that room stay empty.
-  // If the preferred group runs out of fresh rooms mid-code, continue the same
-  // department/code in the other group's fresh rooms before moving on.
+  // Each code starts on a fresh room in its target group, but departments
+  // within the same code are placed back-to-back with no artificial gap.
+  // If a department ends with leftover seats in the current room/group,
+  // the next department of the SAME exam code continues there.
+  // If the preferred group runs out of fresh rooms mid-code, continue the
+  // remaining students of that same code in the other group's fresh rooms.
   let useA = true;
 
-  const fillDepartmentBlock = (
+  const fillCodeBlock = (
     group: 'A' | 'B',
     stuQueue: StudentRecord[]
   ) => {
@@ -167,17 +172,12 @@ export function allocateSeating(
   for (const code of sortedCodes) {
     const primary: 'A' | 'B' = useA ? 'A' : 'B';
     const secondary: 'A' | 'B' = useA ? 'B' : 'A';
+    const stuQueue = code.departments.flatMap((departmentBlock) => departmentBlock.students);
 
-    for (const departmentBlock of code.departments) {
-      const stuQueue = [...departmentBlock.students];
+    fillCodeBlock(primary, stuQueue);
 
-      fillDepartmentBlock(primary, stuQueue);
-
-      if (stuQueue.length > 0) {
-        fillDepartmentBlock(secondary, stuQueue);
-      }
-
-      if (nextFreshA >= roomsNeeded && nextFreshB >= roomsNeeded) break;
+    if (stuQueue.length > 0) {
+      fillCodeBlock(secondary, stuQueue);
     }
 
     useA = !useA;
