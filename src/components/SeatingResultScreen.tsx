@@ -14,6 +14,20 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const [visibleExamCodes, setVisibleExamCodes] = useState<Set<string>>(new Set());
   const printRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (e.key === 'ArrowRight') {
+        setActiveRoom(prev => Math.min(prev + 1, rooms.length - 1));
+      } else if (e.key === 'ArrowLeft') {
+        setActiveRoom(prev => Math.max(prev - 1, 0));
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [rooms.length]);
+
   const toggleExamCode = (code: string) => {
     setVisibleExamCodes(prev => {
       const next = new Set(prev);
