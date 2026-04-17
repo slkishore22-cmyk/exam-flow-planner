@@ -25,15 +25,15 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
     [pdfResults]
   );
 
-  // Group by department + examCode
-  const deptSummary = useMemo(() => {
-    const map: Record<string, { dept: string; examCode: string; count: number }> = {};
+  // Group by exam code → list departments writing that exam
+  const examCodeSummary = useMemo(() => {
+    const map: Record<string, { examCode: string; depts: Record<string, number>; total: number }> = {};
     students.forEach(s => {
-      const key = `${s.department}||${s.examCode}`;
-      if (!map[key]) map[key] = { dept: s.department, examCode: s.examCode, count: 0 };
-      map[key].count++;
+      if (!map[s.examCode]) map[s.examCode] = { examCode: s.examCode, depts: {}, total: 0 };
+      map[s.examCode].depts[s.department] = (map[s.examCode].depts[s.department] || 0) + 1;
+      map[s.examCode].total++;
     });
-    return Object.values(map).sort((a, b) => b.count - a.count);
+    return Object.values(map).sort((a, b) => b.total - a.total);
   }, [students]);
 
   const mismatches = useMemo(
