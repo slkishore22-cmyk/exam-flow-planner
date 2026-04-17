@@ -205,18 +205,13 @@ type GroupLabel = 'A' | 'B' | 'C' | 'D';
  */
 function getGroupForCell(row: number, col: number): GroupLabel {
   const subCol = col % 3; // 0, 1, 2 within a panel
-  const isOddDisplayRow = row % 2 === 0; // rows 0,2,4
+  const isOddRow = row % 2 === 0; // rows 0,2,4 = "odd" display rows 1,3,5
+  const isMiddleCol = subCol === 1;
 
-  if (isOddDisplayRow) {
-    // A C B pattern
-    if (subCol === 0) return 'A';
-    if (subCol === 1) return 'C';
-    return 'B';
+  if (isMiddleCol) {
+    return isOddRow ? 'C' : 'D';
   } else {
-    // B D A pattern
-    if (subCol === 0) return 'B';
-    if (subCol === 1) return 'D';
-    return 'A';
+    return isOddRow ? 'A' : 'B';
   }
 }
 
@@ -237,20 +232,16 @@ function buildGroupPositions(rows: number, totalCols: number): Record<GroupLabel
 }
 
 /**
- * Rank exam codes by student count descending. A=largest, B=2nd, Middle(C+D)=rest.
+ * Rank exam codes by student count descending, assign to groups A, B, C, D cyclically.
  */
-function rankExamCodes(students: StudentRecord[]): {
-  rankings: GroupRanking[];
-  queueA: StudentRecord[];
-  queueB: StudentRecord[];
-  queueMiddle: StudentRecord[];
-} {
+function rankExamCodes(students: StudentRecord[]): { rankings: GroupRanking[]; groupQueues: Record<GroupLabel, StudentRecord[]> } {
   const countMap: Record<string, StudentRecord[]> = {};
   for (const s of students) {
     if (!countMap[s.examCode]) countMap[s.examCode] = [];
     countMap[s.examCode].push(s);
   }
 
+  // Sort each exam code's students by roll number
   for (const code of Object.keys(countMap)) {
     countMap[code].sort((a, b) => {
       const aNum = parseInt(a.rollNumber);
@@ -261,33 +252,23 @@ function rankExamCodes(students: StudentRecord[]): {
   }
 
   const sorted = Object.entries(countMap).sort((a, b) => b[1].length - a[1].length);
+  const groupLabels: GroupLabel[] = ['A', 'B', 'C', 'D'];
   const rankings: GroupRanking[] = [];
-  const queueA: StudentRecord[] = [];
-  const queueB: StudentRecord[] = [];
-  const queueMiddle: StudentRecord[] = [];
+  const groupQueues: Record<GroupLabel, StudentRecord[]> = { A: [], B: [], C: [], D: [] };
 
   for (let i = 0; i < sorted.length; i++) {
     const [code, studs] = sorted[i];
-    let group: GroupLabel;
-    if (i === 0) {
-      group = 'A';
-      queueA.push(...studs);
-    } else if (i === 1) {
-      group = 'B';
-      queueB.push(...studs);
-    } else {
-      group = i % 2 === 0 ? 'D' : 'C';
-      queueMiddle.push(...studs);
-    }
+    const group = groupLabels[i % 4];
     rankings.push({
       rank: i + 1,
       group,
       examCode: code,
       totalStudents: studs.length,
     });
+    groupQueues[group].push(...studs);
   }
 
-  return { rankings, queueA, queueB, queueMiddle };
+  return { rankings, groupQueues };
 }
 
 export function allocateRooms(
@@ -295,11 +276,11 @@ export function allocateRooms(
   config: RoomConfig
 ): AllocationResult {
   const { mainColumns, seatsPerColumn } = config;
-  const totalCols = mainColumns * seatsPerColumn;
-  const rows = 5;
-  const seatsPerRoom = rows * totalCols;
+  const totalCols = mainColumns * seatsPerColumn; // 9
+  const rows = 5; // fixed 5 rows
+  const seatsPerRoom = rows * totalCols; // 45
 
-  const { rankings, queueA, queueB, queueMiddle } = rankExamCodes(students);
+  const { rankings, groupQueues } = rankExamCodes(students);
   const roomsNeeded = Math.ceil(students.length / seatsPerRoom);
   const groupPositions = buildGroupPositions(rows, totalCols);
 
@@ -309,35 +290,17 @@ export function allocateRooms(
     const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
     const roomStudents: StudentRecord[] = [];
 
-    // Fill A positions
-    for (const [row, col] of groupPositions['A']) {
-      if (queueA.length === 0) break;
-      const student = queueA.shift()!;
-      grid[row][col] = student;
-      roomStudents.push(student);
-    }
+    // Fill each group's positions in this room
+    for (const group of ['A', 'B', 'C', 'D'] as GroupLabel[]) {
+      const positions = groupPositions[group];
+      const queue = groupQueues[group];
 
-    // Fill B positions
-    for (const [row, col] of groupPositions['B']) {
-      if (queueB.length === 0) break;
-      const student = queueB.shift()!;
-      grid[row][col] = student;
-      roomStudents.push(student);
-    }
-
-    // Fill middle: D first then C, from ONE shared queue
-    // So an exam code flows from D in room 1 → C in room 2 continuously
-    for (const [row, col] of groupPositions['D']) {
-      if (queueMiddle.length === 0) break;
-      const student = queueMiddle.shift()!;
-      grid[row][col] = student;
-      roomStudents.push(student);
-    }
-    for (const [row, col] of groupPositions['C']) {
-      if (queueMiddle.length === 0) break;
-      const student = queueMiddle.shift()!;
-      grid[row][col] = student;
-      roomStudents.push(student);
+      for (const [row, col] of positions) {
+        if (queue.length === 0) break;
+        const student = queue.shift()!;
+        grid[row][col] = student;
+        roomStudents.push(student);
+      }
     }
 
     rooms.push({
@@ -349,7 +312,7 @@ export function allocateRooms(
     });
   }
 
-  // Count violations
+  // Count violations (adjacent same exam code)
   let violations = 0;
   for (const room of rooms) {
     for (let ri = 0; ri < rows; ri++) {

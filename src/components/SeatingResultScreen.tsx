@@ -88,7 +88,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   // Build exam code → group map from rankings
   const examGroupMap = useMemo(() => {
     const m: Record<string, string> = {};
-    (groupRankings || []).forEach(r => { m[r.examCode] = r.group; });
+    groupRankings.forEach(r => { m[r.examCode] = r.group; });
     return m;
   }, [groupRankings]);
 
@@ -96,7 +96,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const getRoomLegend = (room: RoomAllocation) => {
     const codeSet = new Set(room.students.map(s => s.examCode));
     const legend: Record<string, string[]> = { A: [], B: [], C: [], D: [] };
-    (groupRankings || []).forEach(r => {
+    groupRankings.forEach(r => {
       if (codeSet.has(r.examCode)) {
         legend[r.group].push(r.examCode);
       }
@@ -226,7 +226,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
             </tr>
           </thead>
           <tbody>
-            {(groupRankings || []).map(r => {
+            {groupRankings.map(r => {
               const gc = GROUP_COLORS[r.group];
               return (
                 <tr key={r.rank}>
