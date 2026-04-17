@@ -10,6 +10,8 @@ interface VerificationScreenProps {
   onBack: () => void;
 }
 
+const GENERAL_EXAM_THRESHOLD = 500;
+
 const VerificationScreen: React.FC<VerificationScreenProps> = ({
   students: initialStudents,
   pdfResults,
@@ -19,6 +21,8 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
 }) => {
   const [students, setStudents] = useState<StudentRecord[]>(initialStudents);
   const [newRoll, setNewRoll] = useState('');
+  const [generalExamCode, setGeneralExamCode] = useState<string | null>(null);
+  const [dismissedGeneralPrompt, setDismissedGeneralPrompt] = useState<string | null>(null);
 
   const totalRollNumbers = useMemo(
     () => pdfResults.reduce((sum, r) => sum + r.extractedCount, 0),
@@ -35,6 +39,29 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [students]);
+
+  // Largest exam code candidate for "general exam" prompt
+  const generalCandidate = useMemo(() => {
+    const top = examCodeSummary[0];
+    if (!top) return null;
+    if (top.total < GENERAL_EXAM_THRESHOLD) return null;
+    return top;
+  }, [examCodeSummary]);
+
+  const showGeneralPrompt =
+    generalCandidate &&
+    generalCandidate.examCode !== generalExamCode &&
+    generalCandidate.examCode !== dismissedGeneralPrompt;
+
+  const markGeneral = (examCode: string) => {
+    setGeneralExamCode(examCode);
+    setStudents(prev => prev.map(s => ({ ...s, isGeneral: s.examCode === examCode })));
+  };
+
+  const unmarkGeneral = () => {
+    setGeneralExamCode(null);
+    setStudents(prev => prev.map(s => ({ ...s, isGeneral: false })));
+  };
 
   const mismatches = useMemo(
     () => pdfResults.filter(r => r.declaredCount !== null && r.declaredCount !== r.extractedCount),
