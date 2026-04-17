@@ -67,15 +67,64 @@ function buildRoomSlots(rows: number, mainCols: number, subCols: number): RoomSl
   return slots;
 }
 
+const GENERAL_SEATS_PER_ROOM = 30;
+const GENERAL_ROWS = 5;
+const GENERAL_MAIN_COLS = 3;
+const GENERAL_SEATS_PER_COL = 2;
+
+function buildGeneralRooms(
+  generalStudents: StudentRecord[],
+  startingRoomNumber: number
+): RoomAllocation[] {
+  const sorted = [...generalStudents].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
+  const totalCols = GENERAL_MAIN_COLS * GENERAL_SEATS_PER_COL; // 6
+  const roomsNeeded = Math.ceil(sorted.length / GENERAL_SEATS_PER_ROOM);
+  const rooms: RoomAllocation[] = [];
+
+  for (let i = 0; i < roomsNeeded; i++) {
+    const grid: (StudentRecord | null)[][] = Array.from(
+      { length: GENERAL_ROWS },
+      () => Array(totalCols).fill(null)
+    );
+    const slice = sorted.slice(i * GENERAL_SEATS_PER_ROOM, (i + 1) * GENERAL_SEATS_PER_ROOM);
+    // Fill row-major, left-to-right, top-to-bottom
+    let idx = 0;
+    for (let r = 0; r < GENERAL_ROWS && idx < slice.length; r++) {
+      for (let c = 0; c < totalCols && idx < slice.length; c++) {
+        grid[r][c] = slice[idx++];
+      }
+    }
+    rooms.push({
+      roomNumber: startingRoomNumber + i,
+      students: slice,
+      grid,
+      totalRows: GENERAL_ROWS,
+      seatsPerRow: totalCols,
+      isGeneral: true,
+      mainColumns: GENERAL_MAIN_COLS,
+      seatsPerColumn: GENERAL_SEATS_PER_COL,
+    });
+  }
+
+  return rooms;
+}
+
 export function allocateSeating(
   students: StudentRecord[],
   config: RoomConfig
 ): AllocationResult {
+  // Split off general-exam students — they get dedicated rooms first.
+  const generalStudents = students.filter((s) => s.isGeneral);
+  const normalStudents = students.filter((s) => !s.isGeneral);
+
+  const generalRooms = buildGeneralRooms(generalStudents, 1);
+  const normalStartingRoomNumber = generalRooms.length + 1;
+
   const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
   const totalCols = mainColumns * seatsPerColumn;
   const rows = Math.ceil(studentsPerRoom / totalCols);
-  const total = students.length;
-  const roomsNeeded = Math.max(1, Math.ceil(total / studentsPerRoom));
+  const total = normalStudents.length;
+  const roomsNeeded = total === 0 ? 0 : Math.max(1, Math.ceil(total / studentsPerRoom));
 
   // Build empty rooms
   const rooms: RoomAllocation[] = [];
@@ -86,17 +135,22 @@ export function allocateSeating(
       () => Array(totalCols).fill(null)
     );
     rooms.push({
-      roomNumber: i + 1,
+      roomNumber: normalStartingRoomNumber + i,
       students: [],
       grid,
       totalRows: rows,
       seatsPerRow: totalCols,
+      mainColumns,
+      seatsPerColumn,
     });
     roomSlots.push(buildRoomSlots(rows, mainColumns, seatsPerColumn));
   }
 
-  if (roomsNeeded === 0 || total === 0) {
-    return { rooms, patternDecision: { pattern: 'CRISS_CROSS', message: null, violations: 0 } };
+  if (roomsNeeded === 0) {
+    return {
+      rooms: generalRooms,
+      patternDecision: { pattern: 'CRISS_CROSS', message: null, violations: 0 },
+    };
   }
 
   const groupASize = roomSlots[0].A.length; // typically 15
@@ -109,7 +163,7 @@ export function allocateSeating(
   // Group + sort exam codes by count desc.
   // Phase 1 rule: only 3-digit count exam codes (100+) may be placed in Groups A/B.
   const byCode = new Map<string, StudentRecord[]>();
-  for (const s of students) {
+  for (const s of normalStudents) {
     if (!byCode.has(s.examCode)) byCode.set(s.examCode, []);
     byCode.get(s.examCode)!.push(s);
   }
@@ -241,7 +295,7 @@ export function allocateSeating(
   }
 
   return {
-    rooms,
+    rooms: [...generalRooms, ...rooms],
     patternDecision: { pattern: 'CRISS_CROSS', message: null, violations: 0 },
   };
 }

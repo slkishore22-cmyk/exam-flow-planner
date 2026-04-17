@@ -5,6 +5,7 @@ export interface StudentRecord {
   department: string;
   examCode: string;
   sourcePdf: string;
+  isGeneral?: boolean;
 }
 
 export interface PdfExtractionResult {
@@ -26,6 +27,9 @@ export interface RoomAllocation {
   grid: (StudentRecord | null)[][];
   totalRows: number;
   seatsPerRow: number;
+  isGeneral?: boolean;
+  mainColumns?: number;
+  seatsPerColumn?: number;
 }
 
 export type PatternType = 'CRISS_CROSS' | 'CHECKERBOARD';

@@ -10,6 +10,8 @@ interface VerificationScreenProps {
   onBack: () => void;
 }
 
+const GENERAL_EXAM_THRESHOLD = 500;
+
 const VerificationScreen: React.FC<VerificationScreenProps> = ({
   students: initialStudents,
   pdfResults,
@@ -19,6 +21,8 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
 }) => {
   const [students, setStudents] = useState<StudentRecord[]>(initialStudents);
   const [newRoll, setNewRoll] = useState('');
+  const [generalExamCode, setGeneralExamCode] = useState<string | null>(null);
+  const [dismissedGeneralPrompt, setDismissedGeneralPrompt] = useState<string | null>(null);
 
   const totalRollNumbers = useMemo(
     () => pdfResults.reduce((sum, r) => sum + r.extractedCount, 0),
@@ -35,6 +39,29 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [students]);
+
+  // Largest exam code candidate for "general exam" prompt
+  const generalCandidate = useMemo(() => {
+    const top = examCodeSummary[0];
+    if (!top) return null;
+    if (top.total < GENERAL_EXAM_THRESHOLD) return null;
+    return top;
+  }, [examCodeSummary]);
+
+  const showGeneralPrompt =
+    generalCandidate &&
+    generalCandidate.examCode !== generalExamCode &&
+    generalCandidate.examCode !== dismissedGeneralPrompt;
+
+  const markGeneral = (examCode: string) => {
+    setGeneralExamCode(examCode);
+    setStudents(prev => prev.map(s => ({ ...s, isGeneral: s.examCode === examCode })));
+  };
+
+  const unmarkGeneral = () => {
+    setGeneralExamCode(null);
+    setStudents(prev => prev.map(s => ({ ...s, isGeneral: false })));
+  };
 
   const mismatches = useMemo(
     () => pdfResults.filter(r => r.declaredCount !== null && r.declaredCount !== r.extractedCount),
@@ -83,6 +110,56 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
               {' '}(difference: {Math.abs((m.declaredCount || 0) - m.extractedCount)})
             </p>
           ))}
+        </div>
+      )}
+
+      {/* General-exam prompt — appears when largest exam code crosses threshold */}
+      {showGeneralPrompt && generalCandidate && (
+        <div
+          className="mb-6 p-5 rounded-2xl border-2"
+          style={{ backgroundColor: 'hsl(45, 100%, 96%)', borderColor: 'hsl(45, 90%, 55%)' }}
+        >
+          <p className="font-semibold text-sm mb-1">
+            Is <span className="font-mono">{generalCandidate.examCode}</span> a general exam?
+          </p>
+          <p className="text-sm text-muted-foreground mb-4">
+            <span className="font-mono font-semibold">{generalCandidate.examCode}</span> has{' '}
+            <strong>{generalCandidate.total}</strong> students — unusually high. If this is a general exam,
+            those students will be seated in dedicated 30-seat rooms (
+            <strong>{Math.ceil(generalCandidate.total / 30)} rooms</strong> required), and the rest will follow normal seating.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => markGeneral(generalCandidate.examCode)}
+              className="rounded-xl px-6 h-9 text-sm"
+            >
+              Yes, it's a general exam
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setDismissedGeneralPrompt(generalCandidate.examCode)}
+              className="rounded-xl px-6 h-9 text-sm"
+            >
+              No, treat normally
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Active general-exam banner */}
+      {generalExamCode && (
+        <div
+          className="mb-6 p-4 rounded-2xl border flex items-center justify-between"
+          style={{ backgroundColor: 'hsl(142, 50%, 95%)', borderColor: 'hsl(142, 50%, 60%)' }}
+        >
+          <p className="text-sm">
+            ✓ <span className="font-mono font-semibold">{generalExamCode}</span> marked as general exam —{' '}
+            <strong>{students.filter(s => s.isGeneral).length}</strong> students will be allocated to{' '}
+            <strong>{Math.ceil(students.filter(s => s.isGeneral).length / 30)}</strong> dedicated 30-seat rooms first.
+          </p>
+          <Button variant="ghost" size="sm" onClick={unmarkGeneral} className="text-xs">
+            Undo
+          </Button>
         </div>
       )}
 
