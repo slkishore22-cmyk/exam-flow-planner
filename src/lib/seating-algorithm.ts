@@ -88,21 +88,28 @@ export function allocateSeating(
     if (!byCode.has(s.examCode)) byCode.set(s.examCode, []);
     byCode.get(s.examCode)!.push(s);
   }
-  for (const list of byCode.values()) {
-    // Count students per department within this exam code
-    const deptCounts = new Map<string, number>();
+  for (const [code, list] of byCode.entries()) {
+    // Group students strictly by department — all of one department finishes
+    // before the next department begins. No interleaving.
+    const deptGroups = new Map<string, StudentRecord[]>();
     for (const s of list) {
-      deptCounts.set(s.department, (deptCounts.get(s.department) ?? 0) + 1);
+      if (!deptGroups.has(s.department)) deptGroups.set(s.department, []);
+      deptGroups.get(s.department)!.push(s);
     }
-    // Sort: majority-department first (desc by dept count), then by department
-    // name for stability, then by roll number within each department.
-    list.sort((a, b) => {
-      const ca = deptCounts.get(a.department) ?? 0;
-      const cb = deptCounts.get(b.department) ?? 0;
-      if (cb !== ca) return cb - ca;
-      if (a.department !== b.department) return a.department.localeCompare(b.department);
-      return a.rollNumber.localeCompare(b.rollNumber);
+    // Sort departments: largest department first, then by name for stability.
+    const sortedDepts = Array.from(deptGroups.entries()).sort((a, b) => {
+      if (b[1].length !== a[1].length) return b[1].length - a[1].length;
+      return a[0].localeCompare(b[0]);
     });
+    // Within each department, sort by roll number.
+    const rebuilt: StudentRecord[] = [];
+    for (const [, deptList] of sortedDepts) {
+      deptList.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
+      rebuilt.push(...deptList);
+    }
+    // Replace contents of the original list in place.
+    list.length = 0;
+    list.push(...rebuilt);
   }
   const sortedCodes = Array.from(byCode.entries())
     .sort((a, b) => b[1].length - a[1].length)
