@@ -12,8 +12,8 @@ import {
   PatternDecision,
   deduplicateStudents,
   interleaveStudents,
-  allocateRooms,
 } from '@/lib/seating-utils';
+import { allocateSeating } from '@/lib/seating-algorithm';
 
 const Index = () => {
   const [currentStep, setCurrentStep] = useState(1);
