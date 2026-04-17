@@ -289,9 +289,9 @@ export function allocateSeating(
     const groupSize = group === 'A' ? groupASize : groupBSize;
     // Starting a new code → require a fully fresh room.
     // Continuing the same code → just go to the next room with any free seat (sequential).
-    let cursor = isStart
-      ? findNextFreshRoom(group, 0)
-      : findNextAvailableRoom(group, 0);
+    // Always fill sequentially from the first room in this group with any free seat.
+    // This prevents leaving gaps when a previous code's overflow left partial rooms.
+    let cursor = findNextAvailableRoom(group, 0);
     let deptIndex = 0;
     let studentIndex = 0;
 
