@@ -81,7 +81,8 @@ export function allocateSeating(
   const usedA: number[] = Array(roomsNeeded).fill(0);
   const usedB: number[] = Array(roomsNeeded).fill(0);
 
-  // Group + sort exam codes by count desc, sort students within each by roll number
+  // Group + sort exam codes by count desc, sort students within each by roll number.
+  // Phase 1 rule: only 3-digit count exam codes (100+) may be placed in Groups A/B.
   const byCode = new Map<string, StudentRecord[]>();
   for (const s of students) {
     if (!byCode.has(s.examCode)) byCode.set(s.examCode, []);
@@ -91,7 +92,8 @@ export function allocateSeating(
     list.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
   }
   const sortedCodes = Array.from(byCode.entries())
-    .sort((a, b) => b[1].length - a[1].length);
+    .sort((a, b) => b[1].length - a[1].length)
+    .filter(([, list]) => list.length >= 100);
 
   // Helper: place a student at a room/group slot
   const placeAt = (
