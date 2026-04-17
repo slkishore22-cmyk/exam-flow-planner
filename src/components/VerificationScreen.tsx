@@ -113,6 +113,56 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
         </div>
       )}
 
+      {/* General-exam prompt — appears when largest exam code crosses threshold */}
+      {showGeneralPrompt && generalCandidate && (
+        <div
+          className="mb-6 p-5 rounded-2xl border-2"
+          style={{ backgroundColor: 'hsl(45, 100%, 96%)', borderColor: 'hsl(45, 90%, 55%)' }}
+        >
+          <p className="font-semibold text-sm mb-1">
+            Is <span className="font-mono">{generalCandidate.examCode}</span> a general exam?
+          </p>
+          <p className="text-sm text-muted-foreground mb-4">
+            <span className="font-mono font-semibold">{generalCandidate.examCode}</span> has{' '}
+            <strong>{generalCandidate.total}</strong> students — unusually high. If this is a general exam,
+            those students will be seated in dedicated 30-seat rooms (
+            <strong>{Math.ceil(generalCandidate.total / 30)} rooms</strong> required), and the rest will follow normal seating.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => markGeneral(generalCandidate.examCode)}
+              className="rounded-xl px-6 h-9 text-sm"
+            >
+              Yes, it's a general exam
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setDismissedGeneralPrompt(generalCandidate.examCode)}
+              className="rounded-xl px-6 h-9 text-sm"
+            >
+              No, treat normally
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Active general-exam banner */}
+      {generalExamCode && (
+        <div
+          className="mb-6 p-4 rounded-2xl border flex items-center justify-between"
+          style={{ backgroundColor: 'hsl(142, 50%, 95%)', borderColor: 'hsl(142, 50%, 60%)' }}
+        >
+          <p className="text-sm">
+            ✓ <span className="font-mono font-semibold">{generalExamCode}</span> marked as general exam —{' '}
+            <strong>{students.filter(s => s.isGeneral).length}</strong> students will be allocated to{' '}
+            <strong>{Math.ceil(students.filter(s => s.isGeneral).length / 30)}</strong> dedicated 30-seat rooms first.
+          </p>
+          <Button variant="ghost" size="sm" onClick={unmarkGeneral} className="text-xs">
+            Undo
+          </Button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="border rounded-2xl overflow-hidden mb-6">
         <div className="max-h-[400px] overflow-y-auto">
