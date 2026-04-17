@@ -113,27 +113,42 @@ export function allocateSeating(
   let nextFreshA = 0;
   let nextFreshB = 0;
 
-  // Alternating A/B fill with biggest codes — fresh room start, no spillover
+  // Alternating A/B fill with biggest codes — fresh room start, no spillover.
+  // If the preferred group runs out of fresh rooms mid-code, continue the SAME
+  // code in the other group's fresh rooms before moving on to the next code.
   let useA = true;
 
-  for (const [, list] of sortedCodes) {
-    const stuQueue = [...list];
-    const targetGroup: 'A' | 'B' = useA ? 'A' : 'B';
-    const groupSize = useA ? groupASize : groupBSize;
-    let cursor = useA ? nextFreshA : nextFreshB;
-
+  const fillInGroup = (
+    group: 'A' | 'B',
+    stuQueue: StudentRecord[]
+  ) => {
+    const groupSize = group === 'A' ? groupASize : groupBSize;
+    let cursor = group === 'A' ? nextFreshA : nextFreshB;
     while (stuQueue.length > 0 && cursor < roomsNeeded) {
       let placed = 0;
       while (placed < groupSize && stuQueue.length > 0) {
-        if (!placeAt(cursor, targetGroup, stuQueue[0])) break;
+        if (!placeAt(cursor, group, stuQueue[0])) break;
         stuQueue.shift();
         placed++;
       }
       cursor++;
     }
-
-    if (useA) nextFreshA = cursor;
+    if (group === 'A') nextFreshA = cursor;
     else nextFreshB = cursor;
+  };
+
+  for (const [, list] of sortedCodes) {
+    const stuQueue = [...list];
+    const primary: 'A' | 'B' = useA ? 'A' : 'B';
+    const secondary: 'A' | 'B' = useA ? 'B' : 'A';
+
+    // Fill primary group first
+    fillInGroup(primary, stuQueue);
+
+    // If this code still has students left, spill over into the other group's fresh rooms
+    if (stuQueue.length > 0) {
+      fillInGroup(secondary, stuQueue);
+    }
 
     // Toggle A/B for next code
     useA = !useA;
