@@ -257,12 +257,12 @@ export function allocateSeating(
     return true;
   };
 
-  // Find the next room where the given group is COMPLETELY empty (used count = 0).
-  // Used ONLY when starting a new exam code — to ensure codes don't share a room/group.
-  const findNextFreshRoom = (group: 'A' | 'B', startFrom: number): number => {
-    const used = group === 'A' ? usedA : usedB;
+  // Find the next room where BOTH Group A AND Group B are COMPLETELY empty.
+  // Used ONLY when starting a new exam code — guarantees the code begins in a
+  // truly fresh room not shared with any other exam code in either group.
+  const findNextFreshRoom = (_group: 'A' | 'B', startFrom: number): number => {
     let i = startFrom;
-    while (i < roomsNeeded && used[i] !== 0) i++;
+    while (i < roomsNeeded && (usedA[i] !== 0 || usedB[i] !== 0)) i++;
     return i;
   };
 
