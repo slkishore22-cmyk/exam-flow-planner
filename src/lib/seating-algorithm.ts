@@ -163,7 +163,7 @@ export function allocateSeating(
   // Group + sort exam codes by count desc.
   // Phase 1 rule: only 3-digit count exam codes (100+) may be placed in Groups A/B.
   const byCode = new Map<string, StudentRecord[]>();
-  for (const s of students) {
+  for (const s of normalStudents) {
     if (!byCode.has(s.examCode)) byCode.set(s.examCode, []);
     byCode.get(s.examCode)!.push(s);
   }
