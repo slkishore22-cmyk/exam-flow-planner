@@ -352,6 +352,11 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       <div className="no-print">
         <h3 className="text-xl font-bold text-center mb-4">
           Room {rooms[activeRoom].roomNumber}
+          {rooms[activeRoom].isGeneral && (
+            <span className="text-xs font-semibold ml-2 px-2 py-0.5 rounded-full" style={{ background: 'hsl(45, 100%, 90%)', color: 'hsl(35, 80%, 35%)' }}>
+              GENERAL
+            </span>
+          )}
           <span className="text-sm font-normal text-muted-foreground ml-2">
             ({rooms[activeRoom].students.length} students)
           </span>
