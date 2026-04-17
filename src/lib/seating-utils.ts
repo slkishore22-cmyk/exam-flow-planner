@@ -234,159 +234,6 @@ export function interleaveStudents(students: StudentRecord[]): StudentRecord[] {
   return result;
 }
 
-function buildThreePassOrder(rows: number, mainCols: number, subCols: number) {
-  const oddPositions: [number, number][] = [];
-  const evenPositions: [number, number][] = [];
-  const middlePositions: [number, number][] = [];
-
-  for (let mc = 0; mc < mainCols; mc++) {
-    for (let row = 0; row < rows; row++) {
-      oddPositions.push([row, mc * subCols + 0]);
-    }
-    for (let row = 0; row < rows; row++) {
-      evenPositions.push([row, mc * subCols + (subCols - 1)]);
-    }
-    for (let sc = 1; sc < subCols - 1; sc++) {
-      for (let row = 0; row < rows; row++) {
-        middlePositions.push([row, mc * subCols + sc]);
-      }
-    }
-  }
-
-  return { oddPositions, evenPositions, middlePositions };
-}
-
-function buildThreeQueues(examGroups: Record<string, StudentRecord[]>) {
-  const sorted = Object.entries(examGroups)
-    .filter(([, v]) => v.length > 0)
-    .sort((a, b) => b[1].length - a[1].length);
-
-  const oddQueue: StudentRecord[] = [];
-  const evenQueue: StudentRecord[] = [];
-  const midQueue: StudentRecord[] = [];
-  const oddCodes = new Set<string>();
-  const evenCodes = new Set<string>();
-
-  for (let i = 0; i < sorted.length; i++) {
-    const [code, students] = sorted[i];
-    if (i % 3 === 0) {
-      oddQueue.push(...students);
-      oddCodes.add(code);
-    } else if (i % 3 === 1) {
-      evenQueue.push(...students);
-      evenCodes.add(code);
-    } else {
-      midQueue.push(...students);
-    }
-  }
-
-  return { oddQueue, evenQueue, midQueue, oddCodes, evenCodes };
-}
-
-function buildCheckerboardOrder(rows: number, mainCols: number, subCols: number) {
-  const totalCols = mainCols * subCols;
-  const aPositions: [number, number][] = [];
-  const bPositions: [number, number][] = [];
-
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < totalCols; col++) {
-      if ((row + col) % 2 === 0) {
-        aPositions.push([row, col]);
-      } else {
-        bPositions.push([row, col]);
-      }
-    }
-  }
-
-  return { aPositions, bPositions };
-}
-
-export function decidePattern(
-  examGroups: Record<string, StudentRecord[]>,
-  roomsNeeded: number,
-  mainCols: number,
-  subCols: number,
-  rows: number
-): PatternDecision {
-  const totalSeatsPerRoom = mainCols * subCols * rows;
-  const crissCrossAPerRoom = mainCols * rows;
-  const checkerboardAPerRoom = Math.ceil(totalSeatsPerRoom / 2);
-
-  const crissCrossATotal = roomsNeeded * crissCrossAPerRoom;
-  const checkerboardATotal = roomsNeeded * checkerboardAPerRoom;
-
-  const groupSizes = Object.entries(examGroups)
-    .map(([code, students]) => ({ code, count: students.length }))
-    .sort((a, b) => b.count - a.count);
-
-  if (groupSizes.length === 0) {
-    return { pattern: 'CRISS_CROSS', message: null, violations: 0 };
-  }
-
-  const largest = groupSizes[0];
-
-  if (largest.count <= crissCrossATotal) {
-    return { pattern: 'CRISS_CROSS', message: null, violations: 0 };
-  }
-
-  if (largest.count <= checkerboardATotal) {
-    return {
-      pattern: 'CHECKERBOARD',
-      message: `Pattern auto-switched to Checkerboard because ${largest.code} has ${largest.count.toLocaleString()} students which exceeds Criss Cross capacity of ${crissCrossATotal.toLocaleString()} A seats. Checkerboard provides ${checkerboardATotal.toLocaleString()} A seats.`,
-      violations: 0,
-    };
-  }
-
-  const minRoomsNeeded = Math.ceil(largest.count / checkerboardAPerRoom);
-  const extraRoomsNeeded = minRoomsNeeded - roomsNeeded;
-
-  return {
-    pattern: 'CHECKERBOARD',
-    message: `Warning: ${largest.code} has ${largest.count.toLocaleString()} students. Even Checkerboard cannot fully separate them with ${roomsNeeded} rooms. Need ${minRoomsNeeded} rooms (${extraRoomsNeeded} more).`,
-    violations: 'unavoidable',
-  };
-}
-
-function getNeighborCodes(
-  grid: (StudentRecord | null)[][],
-  row: number,
-  col: number,
-  rows: number,
-  totalCols: number
-): Set<string> {
-  const codes = new Set<string>();
-  const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-  for (const [dr, dc] of dirs) {
-    const nr = row + dr;
-    const nc = col + dc;
-    if (nr >= 0 && nr < rows && nc >= 0 && nc < totalCols && grid[nr][nc]) {
-      codes.add(grid[nr][nc]!.examCode);
-    }
-  }
-  return codes;
-}
-
-function pickBest(pool: StudentRecord[], excludeCodes: Set<string>): StudentRecord | null {
-  const byCode: Record<string, StudentRecord[]> = {};
-  for (const s of pool) {
-    if (!byCode[s.examCode]) byCode[s.examCode] = [];
-    byCode[s.examCode].push(s);
-  }
-
-  const candidates = Object.entries(byCode)
-    .filter(([code]) => !excludeCodes.has(code))
-    .sort((a, b) => b[1].length - a[1].length);
-
-  if (candidates.length > 0) {
-    const bestCode = candidates[0][0];
-    const idx = pool.findIndex(s => s.examCode === bestCode);
-    return pool.splice(idx, 1)[0];
-  }
-
-  if (pool.length > 0) return pool.shift()!;
-  return null;
-}
-
 export function allocateRooms(
   students: StudentRecord[],
   config: RoomConfig
@@ -394,151 +241,29 @@ export function allocateRooms(
   const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
   const totalCols = mainColumns * seatsPerColumn;
   const rows = Math.ceil(studentsPerRoom / totalCols);
-
-  const examGroups: Record<string, StudentRecord[]> = {};
-  for (const s of students) {
-    if (!examGroups[s.examCode]) examGroups[s.examCode] = [];
-    examGroups[s.examCode].push(s);
-  }
-
-  for (const code of Object.keys(examGroups)) {
-    examGroups[code].sort((a, b) => {
-      const aNum = parseInt(a.rollNumber);
-      const bNum = parseInt(b.rollNumber);
-      if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
-      return a.rollNumber.localeCompare(b.rollNumber);
-    });
-  }
-
   const total = students.length;
-  const roomsNeeded = Math.ceil(total / studentsPerRoom);
-
-  const patternDecision = decidePattern(examGroups, roomsNeeded, mainColumns, seatsPerColumn, rows);
-
-  const { oddQueue: poolOdd, evenQueue: poolEven, midQueue: poolMid } = buildThreeQueues(examGroups);
-
-  let currentOddCode = poolOdd[0]?.examCode || null;
-  let currentEvenCode = poolEven[0]?.examCode || null;
+  const roomsNeeded = Math.max(1, Math.ceil(total / studentsPerRoom));
 
   const rooms: RoomAllocation[] = [];
-
   for (let r = 0; r < roomsNeeded; r++) {
-    const maxSeats = Math.min(studentsPerRoom, total - r * studentsPerRoom);
-    const grid: (StudentRecord | null)[][] = Array.from({ length: rows }, () => Array(totalCols).fill(null));
-    let seatedCount = 0;
-
-    if (patternDecision.pattern === 'CHECKERBOARD') {
-      const { aPositions, bPositions } = buildCheckerboardOrder(rows, mainColumns, seatsPerColumn);
-      const allPools = [...poolOdd.splice(0, poolOdd.length), ...poolEven.splice(0, poolEven.length), ...poolMid.splice(0, poolMid.length)];
-
-      for (const [row, col] of aPositions) {
-        if (seatedCount >= maxSeats || allPools.length === 0) break;
-        const nc = getNeighborCodes(grid, row, col, rows, totalCols);
-        const s = pickBest(allPools, nc);
-        if (s) { grid[row][col] = s; seatedCount++; }
-      }
-      for (const [row, col] of bPositions) {
-        if (seatedCount >= maxSeats || allPools.length === 0) break;
-        const nc = getNeighborCodes(grid, row, col, rows, totalCols);
-        const s = pickBest(allPools, nc);
-        if (s) { grid[row][col] = s; seatedCount++; }
-      }
-      poolOdd.push(...allPools);
-    } else {
-      const { oddPositions, evenPositions, middlePositions } = buildThreePassOrder(rows, mainColumns, seatsPerColumn);
-
-      if (poolOdd.length > 0 && !poolOdd.find(s => s.examCode === currentOddCode)) {
-        currentOddCode = poolOdd[0]?.examCode || null;
-      }
-      if (poolEven.length > 0 && !poolEven.find(s => s.examCode === currentEvenCode)) {
-        currentEvenCode = poolEven[0]?.examCode || null;
-      }
-
-      for (const [row, col] of oddPositions) {
-        if (seatedCount >= maxSeats) break;
-        const neighbors = getNeighborCodes(grid, row, col, rows, totalCols);
-
-        if (poolOdd.length > 0) {
-          if (currentOddCode && !neighbors.has(currentOddCode)) {
-            const idx = poolOdd.findIndex(s => s.examCode === currentOddCode);
-            if (idx >= 0) {
-              grid[row][col] = poolOdd.splice(idx, 1)[0];
-              seatedCount++;
-              continue;
-            }
-          }
-          const s = pickBest(poolOdd, neighbors);
-          if (s) { grid[row][col] = s; seatedCount++; continue; }
-        }
-        if (poolEven.length > 0) {
-          const s = pickBest(poolEven, getNeighborCodes(grid, row, col, rows, totalCols));
-          if (s) { grid[row][col] = s; seatedCount++; }
-        }
-      }
-
-      for (const [row, col] of evenPositions) {
-        if (grid[row][col] !== null || seatedCount >= maxSeats) continue;
-        const neighbors = getNeighborCodes(grid, row, col, rows, totalCols);
-        if (currentOddCode) neighbors.add(currentOddCode);
-
-        if (poolEven.length > 0) {
-          if (currentEvenCode && !neighbors.has(currentEvenCode)) {
-            const idx = poolEven.findIndex(s => s.examCode === currentEvenCode);
-            if (idx >= 0) {
-              grid[row][col] = poolEven.splice(idx, 1)[0];
-              seatedCount++;
-              continue;
-            }
-          }
-          const s = pickBest(poolEven, neighbors);
-          if (s) { grid[row][col] = s; seatedCount++; continue; }
-        }
-        if (poolOdd.length > 0) {
-          const s = pickBest(poolOdd, getNeighborCodes(grid, row, col, rows, totalCols));
-          if (s) { grid[row][col] = s; seatedCount++; }
-        }
-      }
-
-      for (const [row, col] of middlePositions) {
-        if (grid[row][col] !== null || seatedCount >= maxSeats) continue;
-
-        const neighbors = getNeighborCodes(grid, row, col, rows, totalCols);
-        if (currentOddCode) neighbors.add(currentOddCode);
-        if (currentEvenCode) neighbors.add(currentEvenCode);
-        if (row > 0 && grid[row - 1][col]) {
-          neighbors.add(grid[row - 1][col]!.examCode);
-        }
-
-        let student: StudentRecord | null = null;
-        if (poolMid.length > 0) {
-          student = pickBest(poolMid, neighbors);
-          if (!student) {
-            const strict = getNeighborCodes(grid, row, col, rows, totalCols);
-            student = pickBest(poolMid, strict);
-          }
-          if (student) { grid[row][col] = student; seatedCount++; continue; }
-        }
-        if (poolEven.length > 0) {
-          student = pickBest(poolEven, getNeighborCodes(grid, row, col, rows, totalCols));
-          if (student) { grid[row][col] = student; seatedCount++; continue; }
-        }
-        if (poolOdd.length > 0) {
-          student = pickBest(poolOdd, getNeighborCodes(grid, row, col, rows, totalCols));
-          if (student) { grid[row][col] = student; seatedCount++; }
-        }
-      }
-    }
-
-    const roomStudents = grid.flat().filter((s): s is StudentRecord => s !== null);
-
+    const grid: (StudentRecord | null)[][] = Array.from(
+      { length: rows },
+      () => Array(totalCols).fill(null)
+    );
     rooms.push({
       roomNumber: r + 1,
-      students: roomStudents,
+      students: [],
       grid,
       totalRows: rows,
       seatsPerRow: totalCols,
     });
   }
+
+  const patternDecision: PatternDecision = {
+    pattern: 'CRISS_CROSS',
+    message: null,
+    violations: 0,
+  };
 
   return { rooms, patternDecision };
 }
