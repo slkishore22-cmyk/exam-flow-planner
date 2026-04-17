@@ -284,12 +284,6 @@ export function getGroupLabel(
   return isOddRow ? oddPattern[sc % 3] : evenPattern[sc % 3];
 }
 
-export function allocateRooms(
-  students: StudentRecord[],
-  config: RoomConfig
-): AllocationResult {
-  // Delegate to the dedicated seating algorithm module
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { allocateSeating } = require('./seating-algorithm');
-  return allocateSeating(students, config);
-}
+// allocateRooms has been moved to ./seating-algorithm.ts as `allocateSeating`.
+// Re-exported here for backwards compatibility via a thin wrapper in Index.tsx.
+
