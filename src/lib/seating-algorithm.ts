@@ -78,17 +78,39 @@ function buildGeneralRooms(
 ): RoomAllocation[] {
   const sorted = [...generalStudents].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
   const totalCols = GENERAL_MAIN_COLS * GENERAL_SEATS_PER_COL; // 6
-  const seatsPerGroupPerRoom = GENERAL_ROWS * GENERAL_MAIN_COLS; // 15 A + 15 B = 30
+  const seatsPerGroupPerRoom = GENERAL_ROWS * GENERAL_MAIN_COLS; // 15 per group
 
   // Split students 50/50: first half → Group A, second half → Group B
   const half = Math.ceil(sorted.length / 2);
   const groupAStudents = sorted.slice(0, half);
   const groupBStudents = sorted.slice(half);
 
-  const roomsNeeded = Math.max(
-    Math.ceil(groupAStudents.length / seatsPerGroupPerRoom),
-    Math.ceil(groupBStudents.length / seatsPerGroupPerRoom)
-  );
+  // Group each half by department, preserving the order departments first appear
+  const groupByDept = (list: StudentRecord[]) => {
+    const map = new Map<string, StudentRecord[]>();
+    for (const s of list) {
+      const key = s.department.trim().toUpperCase();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(s);
+    }
+    return Array.from(map.values());
+  };
+
+  // Build per-room slices for one group, where each department starts a fresh room.
+  const buildSlicesPerRoom = (deptBuckets: StudentRecord[][]): StudentRecord[][] => {
+    const slices: StudentRecord[][] = [];
+    for (const bucket of deptBuckets) {
+      for (let i = 0; i < bucket.length; i += seatsPerGroupPerRoom) {
+        slices.push(bucket.slice(i, i + seatsPerGroupPerRoom));
+      }
+    }
+    return slices;
+  };
+
+  const aSlices = buildSlicesPerRoom(groupByDept(groupAStudents));
+  const bSlices = buildSlicesPerRoom(groupByDept(groupBStudents));
+
+  const roomsNeeded = Math.max(aSlices.length, bSlices.length);
   const rooms: RoomAllocation[] = [];
 
   for (let i = 0; i < roomsNeeded; i++) {
@@ -97,11 +119,10 @@ function buildGeneralRooms(
       () => Array(totalCols).fill(null)
     );
 
-    const aSlice = groupAStudents.slice(i * seatsPerGroupPerRoom, (i + 1) * seatsPerGroupPerRoom);
-    const bSlice = groupBStudents.slice(i * seatsPerGroupPerRoom, (i + 1) * seatsPerGroupPerRoom);
+    const aSlice = aSlices[i] ?? [];
+    const bSlice = bSlices[i] ?? [];
 
     // Group A → even sub-columns (0, 2, 4); Group B → odd sub-columns (1, 3, 5)
-    // Fill row-major within each group: row 0 mc0, row 0 mc1, row 0 mc2, row 1 mc0, ...
     let aIdx = 0;
     let bIdx = 0;
     for (let r = 0; r < GENERAL_ROWS; r++) {
