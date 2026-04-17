@@ -295,7 +295,7 @@ export function allocateSeating(
   }
 
   return {
-    rooms,
+    rooms: [...generalRooms, ...rooms],
     patternDecision: { pattern: 'CRISS_CROSS', message: null, violations: 0 },
   };
 }
