@@ -149,10 +149,14 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                 let cellBorder: string;
 
                 if (!isOccupied) {
-                  // Truly empty seat
-                  cellBg = 'hsl(var(--muted))';
+                  // Empty seat — show group label (A/B/C/D) with group color
+                  const group = getGroupLabel(rowIdx, colIdx, config.seatsPerColumn);
+                  const gc = GROUP_COLORS[group];
+                  cellBg = gc.bg;
                   cellBorder = '2px solid white';
-                  cellContent = <span className="text-muted-foreground text-xs">—</span>;
+                  cellContent = (
+                    <span style={{ color: gc.text, fontWeight: 700, fontSize: 18 }}>{group}</span>
+                  );
                 } else if (!isVisible && showReveal) {
                   // Occupied but hidden — show placeholder with seat label
                   cellBg = 'hsl(var(--muted))';
