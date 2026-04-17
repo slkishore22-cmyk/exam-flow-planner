@@ -335,7 +335,7 @@ export function allocateSeating(
 
     useA = !useA;
 
-    if (nextFreshA >= roomsNeeded && nextFreshB >= roomsNeeded) break;
+    if (findNextFreshRoom('A', 0) >= roomsNeeded && findNextFreshRoom('B', 0) >= roomsNeeded) break;
   }
 
   return {
