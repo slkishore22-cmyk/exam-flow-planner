@@ -78,7 +78,17 @@ function buildGeneralRooms(
 ): RoomAllocation[] {
   const sorted = [...generalStudents].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
   const totalCols = GENERAL_MAIN_COLS * GENERAL_SEATS_PER_COL; // 6
-  const roomsNeeded = Math.ceil(sorted.length / GENERAL_SEATS_PER_ROOM);
+  const seatsPerGroupPerRoom = GENERAL_ROWS * GENERAL_MAIN_COLS; // 15 A + 15 B = 30
+
+  // Split students 50/50: first half → Group A, second half → Group B
+  const half = Math.ceil(sorted.length / 2);
+  const groupAStudents = sorted.slice(0, half);
+  const groupBStudents = sorted.slice(half);
+
+  const roomsNeeded = Math.max(
+    Math.ceil(groupAStudents.length / seatsPerGroupPerRoom),
+    Math.ceil(groupBStudents.length / seatsPerGroupPerRoom)
+  );
   const rooms: RoomAllocation[] = [];
 
   for (let i = 0; i < roomsNeeded; i++) {
@@ -86,17 +96,26 @@ function buildGeneralRooms(
       { length: GENERAL_ROWS },
       () => Array(totalCols).fill(null)
     );
-    const slice = sorted.slice(i * GENERAL_SEATS_PER_ROOM, (i + 1) * GENERAL_SEATS_PER_ROOM);
-    // Fill row-major, left-to-right, top-to-bottom
-    let idx = 0;
-    for (let r = 0; r < GENERAL_ROWS && idx < slice.length; r++) {
-      for (let c = 0; c < totalCols && idx < slice.length; c++) {
-        grid[r][c] = slice[idx++];
+
+    const aSlice = groupAStudents.slice(i * seatsPerGroupPerRoom, (i + 1) * seatsPerGroupPerRoom);
+    const bSlice = groupBStudents.slice(i * seatsPerGroupPerRoom, (i + 1) * seatsPerGroupPerRoom);
+
+    // Group A → even sub-columns (0, 2, 4); Group B → odd sub-columns (1, 3, 5)
+    // Fill row-major within each group: row 0 mc0, row 0 mc1, row 0 mc2, row 1 mc0, ...
+    let aIdx = 0;
+    let bIdx = 0;
+    for (let r = 0; r < GENERAL_ROWS; r++) {
+      for (let mc = 0; mc < GENERAL_MAIN_COLS; mc++) {
+        const aCol = mc * GENERAL_SEATS_PER_COL; // 0, 2, 4
+        const bCol = aCol + 1;                    // 1, 3, 5
+        if (aIdx < aSlice.length) grid[r][aCol] = aSlice[aIdx++];
+        if (bIdx < bSlice.length) grid[r][bCol] = bSlice[bIdx++];
       }
     }
+
     rooms.push({
       roomNumber: startingRoomNumber + i,
-      students: slice,
+      students: [...aSlice, ...bSlice],
       grid,
       totalRows: GENERAL_ROWS,
       seatsPerRow: totalCols,
