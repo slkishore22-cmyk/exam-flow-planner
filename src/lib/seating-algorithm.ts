@@ -257,8 +257,8 @@ export function allocateSeating(
     return true;
   };
 
-  // Find the next room where the given group is still empty (used count = 0).
-  // This prevents skipping rooms that another code's overflow may have left untouched.
+  // Find the next room where the given group is COMPLETELY empty (used count = 0).
+  // Used ONLY when starting a new exam code — to ensure codes don't share a room/group.
   const findNextFreshRoom = (group: 'A' | 'B', startFrom: number): number => {
     const used = group === 'A' ? usedA : usedB;
     let i = startFrom;
@@ -266,28 +266,42 @@ export function allocateSeating(
     return i;
   };
 
+  // Find the next room with ANY available space in this group.
+  // Used WITHIN a code to continue contiguously — won't skip partially-used rooms,
+  // but since each code starts on a fresh room and fills sequentially, it naturally
+  // continues into the next sequential room.
+  const findNextAvailableRoom = (group: 'A' | 'B', startFrom: number): number => {
+    const used = group === 'A' ? usedA : usedB;
+    const groupSize = group === 'A' ? groupASize : groupBSize;
+    let i = startFrom;
+    while (i < roomsNeeded && used[i] >= groupSize) i++;
+    return i;
+  };
+
   // Alternating A/B fill with biggest codes.
-  // Each code starts on a fresh room in its target group, but departments
-  // within the same code are placed back-to-back with no artificial gap.
-  // If a department ends with leftover seats in the current room/group,
-  // the next department of the SAME exam code continues there.
-  // If the preferred group runs out of fresh rooms mid-code, continue the
-  // remaining students of that same code in the other group's fresh rooms.
   let useA = true;
 
   const fillDepartmentSeries = (
     group: 'A' | 'B',
-    departments: { department: string; students: StudentRecord[] }[]
+    departments: { department: string; students: StudentRecord[] }[],
+    isStart: boolean
   ) => {
     const groupSize = group === 'A' ? groupASize : groupBSize;
-    // Always start at the next ACTUALLY-empty room in this group, not a stale cursor.
-    let cursor = findNextFreshRoom(group, 0);
+    // Starting a new code → require a fully fresh room.
+    // Continuing the same code → just go to the next room with any free seat (sequential).
+    let cursor = isStart
+      ? findNextFreshRoom(group, 0)
+      : findNextAvailableRoom(group, 0);
     let deptIndex = 0;
     let studentIndex = 0;
 
     while (deptIndex < departments.length && cursor < roomsNeeded) {
+      const used = group === 'A' ? usedA : usedB;
+      const startUsed = used[cursor];
       let placed = 0;
-      while (placed < groupSize && deptIndex < departments.length) {
+      const remainingInRoom = groupSize - startUsed;
+
+      while (placed < remainingInRoom && deptIndex < departments.length) {
         const currentDepartment = departments[deptIndex];
         const student = currentDepartment.students[studentIndex];
         if (!student) {
@@ -307,8 +321,8 @@ export function allocateSeating(
         }
       }
 
-      // Move to the next empty room of this group (skip rooms already used).
-      cursor = findNextFreshRoom(group, cursor + 1);
+      // Move to the very NEXT sequential room in this group (don't skip).
+      cursor = findNextAvailableRoom(group, cursor + 1);
     }
 
     return departments.slice(deptIndex).map((department, index) => ({
@@ -327,10 +341,11 @@ export function allocateSeating(
       students: [...departmentBlock.students],
     }));
 
-    remainingDepartments = fillDepartmentSeries(primary, remainingDepartments);
+    remainingDepartments = fillDepartmentSeries(primary, remainingDepartments, true);
 
     if (remainingDepartments.length > 0) {
-      fillDepartmentSeries(secondary, remainingDepartments);
+      // Overflow into the other group — also continue sequentially, no skipping.
+      fillDepartmentSeries(secondary, remainingDepartments, false);
     }
 
     useA = !useA;
