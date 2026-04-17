@@ -89,7 +89,20 @@ export function allocateSeating(
     byCode.get(s.examCode)!.push(s);
   }
   for (const list of byCode.values()) {
-    list.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
+    // Count students per department within this exam code
+    const deptCounts = new Map<string, number>();
+    for (const s of list) {
+      deptCounts.set(s.department, (deptCounts.get(s.department) ?? 0) + 1);
+    }
+    // Sort: majority-department first (desc by dept count), then by department
+    // name for stability, then by roll number within each department.
+    list.sort((a, b) => {
+      const ca = deptCounts.get(a.department) ?? 0;
+      const cb = deptCounts.get(b.department) ?? 0;
+      if (cb !== ca) return cb - ca;
+      if (a.department !== b.department) return a.department.localeCompare(b.department);
+      return a.rollNumber.localeCompare(b.rollNumber);
+    });
   }
   const sortedCodes = Array.from(byCode.entries())
     .sort((a, b) => b[1].length - a[1].length)
