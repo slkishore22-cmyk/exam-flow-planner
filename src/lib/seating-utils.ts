@@ -336,12 +336,13 @@ function allocateBucketToGroup(
 }
 
 /**
- * Fill remaining seats with smaller buckets.
- * RULE: Middle rows (C, D) are reserved ONLY for small exam codes (≤9 students total).
- *       Big codes (>9) may only use side lanes A and B.
- *       Never mix the same examCode in adjacent groups within a room.
+ * Fill remaining seats with smaller buckets, preferring middle rows (C/D) for small codes
+ * and never mixing same examCode in adjacent groups within a room.
  */
 function fillRemaining(buckets: ExamBucket[], rooms: RoomSlot[]) {
+  const groupOrder: GroupLabel[] = ['C', 'D', 'A', 'B'];
+
+  // Sort remaining buckets by size descending
   const remaining = () => buckets.filter((b) => b.students.length > 0).sort((a, b) => b.students.length - a.students.length);
 
   let safety = 10000;
@@ -350,14 +351,12 @@ function fillRemaining(buckets: ExamBucket[], rooms: RoomSlot[]) {
     let placed = false;
 
     for (const bucket of list) {
-      const isSmall = bucket.totalStudents <= 9;
-      // Small codes prefer middle (C, D) first; big codes only use A/B
-      const groupOrder: GroupLabel[] = isSmall ? ['D', 'C', 'A', 'B'] : ['A', 'B'];
-
+      // Try to place into smallest free lane that fits
       for (const room of rooms) {
         if (bucket.students.length === 0) break;
         for (const g of groupOrder) {
           if (room.occupied[g] !== null) continue;
+          // No same examCode already in this room
           if (Object.values(room.occupied).some((c) => c === bucket.examCode)) continue;
           const cap = GROUP_CAPACITY[g];
           const take = Math.min(cap, bucket.students.length);
