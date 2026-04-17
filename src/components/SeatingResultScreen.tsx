@@ -163,7 +163,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
 
                 if (!isOccupied) {
                   // Empty seat — colorless cell with small group label (A/B/C/D)
-                  const group = isGeneral ? 'A' : getGroupLabel(rowIdx, colIdx, seatsPerColumn);
+                  const group = isGeneral ? generalGroup : getGroupLabel(rowIdx, colIdx, seatsPerColumn);
                   cellBg = 'hsl(var(--background))';
                   cellBorder = '1px solid hsl(var(--border))';
                   cellContent = (
