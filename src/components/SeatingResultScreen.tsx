@@ -1,6 +1,13 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor } from '@/lib/seating-utils';
+import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor, getGroupLabel } from '@/lib/seating-utils';
+
+const GROUP_COLORS: Record<'A' | 'B' | 'C' | 'D', { bg: string; text: string }> = {
+  A: { bg: '#FEF3C7', text: '#92400E' },
+  B: { bg: '#DBEAFE', text: '#1E40AF' },
+  C: { bg: '#DCFCE7', text: '#166534' },
+  D: { bg: '#FCE7F3', text: '#9D174D' },
+};
 
 interface SeatingResultScreenProps {
   rooms: RoomAllocation[];
