@@ -343,23 +343,16 @@ function allocateBucketToGroup(
  */
 function fillRemaining(buckets: ExamBucket[], rooms: RoomSlot[]) {
   const remaining = () => buckets.filter((b) => b.students.length > 0).sort((a, b) => b.students.length - a.students.length);
-  const hasSmallLeft = () => buckets.some((b) => b.students.length > 0 && b.totalStudents <= 9);
 
   let safety = 10000;
   while (remaining().length > 0 && safety-- > 0) {
     const list = remaining();
     let placed = false;
-    const smallLeft = hasSmallLeft();
 
     for (const bucket of list) {
       const isSmall = bucket.totalStudents <= 9;
-      // While small codes remain: big codes only use A/B, small codes prefer D/C.
-      // Once small codes exhausted: big codes may also fill C/D to avoid empty seats.
-      const groupOrder: GroupLabel[] = isSmall
-        ? ['D', 'C', 'A', 'B']
-        : smallLeft
-          ? ['A', 'B']
-          : ['A', 'B', 'C', 'D'];
+      // Small codes prefer middle (C, D) first; big codes only use A/B
+      const groupOrder: GroupLabel[] = isSmall ? ['D', 'C', 'A', 'B'] : ['A', 'B'];
 
       for (const room of rooms) {
         if (bucket.students.length === 0) break;
@@ -378,6 +371,7 @@ function fillRemaining(buckets: ExamBucket[], rooms: RoomSlot[]) {
     }
 
     if (!placed) {
+      // No free lane anywhere — add a new room
       rooms.push(makeEmptyRoom(rooms.length));
     }
   }
