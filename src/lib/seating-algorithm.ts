@@ -81,39 +81,40 @@ export function allocateSeating(
   const usedA: number[] = Array(roomsNeeded).fill(0);
   const usedB: number[] = Array(roomsNeeded).fill(0);
 
-  // Group + sort exam codes by count desc, sort students within each by roll number.
+  // Group + sort exam codes by count desc.
   // Phase 1 rule: only 3-digit count exam codes (100+) may be placed in Groups A/B.
   const byCode = new Map<string, StudentRecord[]>();
   for (const s of students) {
     if (!byCode.has(s.examCode)) byCode.set(s.examCode, []);
     byCode.get(s.examCode)!.push(s);
   }
-  for (const [code, list] of byCode.entries()) {
-    // Group students strictly by department — all of one department finishes
-    // before the next department begins. No interleaving.
-    const deptGroups = new Map<string, StudentRecord[]>();
-    for (const s of list) {
-      if (!deptGroups.has(s.department)) deptGroups.set(s.department, []);
-      deptGroups.get(s.department)!.push(s);
-    }
-    // Sort departments: largest department first, then by name for stability.
-    const sortedDepts = Array.from(deptGroups.entries()).sort((a, b) => {
-      if (b[1].length !== a[1].length) return b[1].length - a[1].length;
-      return a[0].localeCompare(b[0]);
-    });
-    // Within each department, sort by roll number.
-    const rebuilt: StudentRecord[] = [];
-    for (const [, deptList] of sortedDepts) {
-      deptList.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
-      rebuilt.push(...deptList);
-    }
-    // Replace contents of the original list in place.
-    list.length = 0;
-    list.push(...rebuilt);
-  }
+
   const sortedCodes = Array.from(byCode.entries())
-    .sort((a, b) => b[1].length - a[1].length)
-    .filter(([, list]) => list.length >= 100);
+    .map(([examCode, list]) => {
+      const deptGroups = new Map<string, StudentRecord[]>();
+      for (const student of list) {
+        if (!deptGroups.has(student.department)) deptGroups.set(student.department, []);
+        deptGroups.get(student.department)!.push(student);
+      }
+
+      const departments = Array.from(deptGroups.entries())
+        .sort((a, b) => {
+          if (b[1].length !== a[1].length) return b[1].length - a[1].length;
+          return a[0].localeCompare(b[0]);
+        })
+        .map(([department, deptList]) => ({
+          department,
+          students: [...deptList].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber)),
+        }));
+
+      return {
+        examCode,
+        totalCount: list.length,
+        departments,
+      };
+    })
+    .sort((a, b) => b.totalCount - a.totalCount)
+    .filter((code) => code.totalCount >= 100);
 
   // Helper: place a student at a room/group slot
   const placeAt = (
@@ -135,17 +136,20 @@ export function allocateSeating(
   let nextFreshA = 0;
   let nextFreshB = 0;
 
-  // Alternating A/B fill with biggest codes — fresh room start, no spillover.
-  // If the preferred group runs out of fresh rooms mid-code, continue the SAME
-  // code in the other group's fresh rooms before moving on to the next code.
+  // Alternating A/B fill with biggest codes.
+  // Each department block inside a code starts on a fresh room only.
+  // If a department ends early, the remaining seats in that room stay empty.
+  // If the preferred group runs out of fresh rooms mid-code, continue the same
+  // department/code in the other group's fresh rooms before moving on.
   let useA = true;
 
-  const fillInGroup = (
+  const fillDepartmentBlock = (
     group: 'A' | 'B',
     stuQueue: StudentRecord[]
   ) => {
     const groupSize = group === 'A' ? groupASize : groupBSize;
     let cursor = group === 'A' ? nextFreshA : nextFreshB;
+
     while (stuQueue.length > 0 && cursor < roomsNeeded) {
       let placed = 0;
       while (placed < groupSize && stuQueue.length > 0) {
@@ -155,27 +159,29 @@ export function allocateSeating(
       }
       cursor++;
     }
+
     if (group === 'A') nextFreshA = cursor;
     else nextFreshB = cursor;
   };
 
-  for (const [, list] of sortedCodes) {
-    const stuQueue = [...list];
+  for (const code of sortedCodes) {
     const primary: 'A' | 'B' = useA ? 'A' : 'B';
     const secondary: 'A' | 'B' = useA ? 'B' : 'A';
 
-    // Fill primary group first
-    fillInGroup(primary, stuQueue);
+    for (const departmentBlock of code.departments) {
+      const stuQueue = [...departmentBlock.students];
 
-    // If this code still has students left, spill over into the other group's fresh rooms
-    if (stuQueue.length > 0) {
-      fillInGroup(secondary, stuQueue);
+      fillDepartmentBlock(primary, stuQueue);
+
+      if (stuQueue.length > 0) {
+        fillDepartmentBlock(secondary, stuQueue);
+      }
+
+      if (nextFreshA >= roomsNeeded && nextFreshB >= roomsNeeded) break;
     }
 
-    // Toggle A/B for next code
     useA = !useA;
 
-    // If we've run out of fresh rooms in BOTH queues, stop assigning more codes.
     if (nextFreshA >= roomsNeeded && nextFreshB >= roomsNeeded) break;
   }
 
