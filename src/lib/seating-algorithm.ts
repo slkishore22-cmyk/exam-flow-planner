@@ -33,6 +33,13 @@ interface RoomSlots {
   D: SeatPosition[];
 }
 
+function normalizeDepartmentKey(department: string): string {
+  return department
+    .toUpperCase()
+    .replace(/[\s.]+/g, '')
+    .trim();
+}
+
 function buildRoomSlots(rows: number, mainCols: number, subCols: number): RoomSlots {
   const slots: RoomSlots = { A: [], B: [], C: [], D: [] };
   const totalCols = mainCols * subCols;
@@ -94,20 +101,26 @@ export function allocateSeating(
 
   const sortedCodes = Array.from(byCode.entries())
     .map(([examCode, list]) => {
-      const deptGroups = new Map<string, StudentRecord[]>();
+      const deptGroups = new Map<string, { department: string; students: StudentRecord[] }>();
       for (const student of list) {
-        if (!deptGroups.has(student.department)) deptGroups.set(student.department, []);
-        deptGroups.get(student.department)!.push(student);
+        const key = normalizeDepartmentKey(student.department);
+        if (!deptGroups.has(key)) {
+          deptGroups.set(key, {
+            department: student.department.trim().toUpperCase(),
+            students: [],
+          });
+        }
+        deptGroups.get(key)!.students.push(student);
       }
 
-      const departments = Array.from(deptGroups.entries())
+      const departments = Array.from(deptGroups.values())
         .sort((a, b) => {
-          if (b[1].length !== a[1].length) return b[1].length - a[1].length;
-          return a[0].localeCompare(b[0]);
+          if (b.students.length !== a.students.length) return b.students.length - a.students.length;
+          return a.department.localeCompare(b.department);
         })
-        .map(([department, deptList]) => ({
+        .map(({ department, students: deptStudents }) => ({
           department,
-          students: [...deptList].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber)),
+          students: [...deptStudents].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber)),
         }));
 
       return {
@@ -148,36 +161,63 @@ export function allocateSeating(
   // remaining students of that same code in the other group's fresh rooms.
   let useA = true;
 
-  const fillCodeBlock = (
+  const fillDepartmentSeries = (
     group: 'A' | 'B',
-    stuQueue: StudentRecord[]
+    departments: { department: string; students: StudentRecord[] }[]
   ) => {
     const groupSize = group === 'A' ? groupASize : groupBSize;
     let cursor = group === 'A' ? nextFreshA : nextFreshB;
+    let deptIndex = 0;
+    let studentIndex = 0;
 
-    while (stuQueue.length > 0 && cursor < roomsNeeded) {
+    while (deptIndex < departments.length && cursor < roomsNeeded) {
       let placed = 0;
-      while (placed < groupSize && stuQueue.length > 0) {
-        if (!placeAt(cursor, group, stuQueue[0])) break;
-        stuQueue.shift();
+      while (placed < groupSize && deptIndex < departments.length) {
+        const currentDepartment = departments[deptIndex];
+        const student = currentDepartment.students[studentIndex];
+        if (!student) {
+          deptIndex++;
+          studentIndex = 0;
+          continue;
+        }
+
+        if (!placeAt(cursor, group, student)) break;
+
+        studentIndex++;
         placed++;
+
+        if (studentIndex >= currentDepartment.students.length) {
+          deptIndex++;
+          studentIndex = 0;
+        }
       }
+
       cursor++;
     }
 
     if (group === 'A') nextFreshA = cursor;
     else nextFreshB = cursor;
+
+    return departments.slice(deptIndex).map((department, index) => ({
+      department: department.department,
+      students: index === 0 && studentIndex > 0
+        ? department.students.slice(studentIndex)
+        : [...department.students],
+    }));
   };
 
   for (const code of sortedCodes) {
     const primary: 'A' | 'B' = useA ? 'A' : 'B';
     const secondary: 'A' | 'B' = useA ? 'B' : 'A';
-    const stuQueue = code.departments.flatMap((departmentBlock) => departmentBlock.students);
+    let remainingDepartments = code.departments.map((departmentBlock) => ({
+      department: departmentBlock.department,
+      students: [...departmentBlock.students],
+    }));
 
-    fillCodeBlock(primary, stuQueue);
+    remainingDepartments = fillDepartmentSeries(primary, remainingDepartments);
 
-    if (stuQueue.length > 0) {
-      fillCodeBlock(secondary, stuQueue);
+    if (remainingDepartments.length > 0) {
+      fillDepartmentSeries(secondary, remainingDepartments);
     }
 
     useA = !useA;
