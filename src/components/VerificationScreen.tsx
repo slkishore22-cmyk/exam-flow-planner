@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { StudentRecord, PdfExtractionResult, getDeptColor } from '@/lib/seating-utils';
+import { StudentRecord, PdfExtractionResult, getDeptColor, getExamCodeColor } from '@/lib/seating-utils';
 
 interface VerificationScreenProps {
   students: StudentRecord[];
@@ -25,15 +25,15 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
     [pdfResults]
   );
 
-  // Group by department + examCode
-  const deptSummary = useMemo(() => {
-    const map: Record<string, { dept: string; examCode: string; count: number }> = {};
+  // Group by exam code → list departments writing that exam
+  const examCodeSummary = useMemo(() => {
+    const map: Record<string, { examCode: string; depts: Record<string, number>; total: number }> = {};
     students.forEach(s => {
-      const key = `${s.department}||${s.examCode}`;
-      if (!map[key]) map[key] = { dept: s.department, examCode: s.examCode, count: 0 };
-      map[key].count++;
+      if (!map[s.examCode]) map[s.examCode] = { examCode: s.examCode, depts: {}, total: 0 };
+      map[s.examCode].depts[s.department] = (map[s.examCode].depts[s.department] || 0) + 1;
+      map[s.examCode].total++;
     });
-    return Object.values(map).sort((a, b) => b.count - a.count);
+    return Object.values(map).sort((a, b) => b.total - a.total);
   }, [students]);
 
   const mismatches = useMemo(
@@ -133,21 +133,33 @@ const VerificationScreen: React.FC<VerificationScreenProps> = ({
         </div>
       </div>
 
-      {/* Department summary — grouped by dept + examCode */}
+      {/* Exam code summary — grouped by exam code, colored by exam code */}
       <div className="mb-6 p-4 bg-secondary rounded-2xl">
-        <p className="text-sm font-semibold mb-3">Department Summary</p>
-        <div className="flex flex-col gap-2">
-          {deptSummary.map((entry) => {
-            const color = getDeptColor(entry.dept);
+        <p className="text-sm font-semibold mb-3">Exam Code Summary</p>
+        <div className="flex flex-col gap-3">
+          {examCodeSummary.map((entry) => {
+            const color = getExamCodeColor(entry.examCode);
             return (
-              <div key={`${entry.dept}-${entry.examCode}`} className="flex items-center gap-3 text-sm">
+              <div key={entry.examCode} className="flex items-start gap-3 text-sm">
                 <span
-                  className="w-5 h-5 rounded inline-block flex-shrink-0"
-                  style={{ backgroundColor: color.bg }}
-                />
-                <span className="font-medium w-24">{entry.dept}</span>
-                <span className="font-mono font-semibold w-20" style={{ color: '#D4AF37' }}>{entry.examCode}</span>
-                <span className="text-muted-foreground">{entry.count} students</span>
+                  className="px-2.5 py-1 rounded font-mono font-semibold text-xs flex-shrink-0"
+                  style={{ backgroundColor: color.bg, color: color.text }}
+                >
+                  {entry.examCode}
+                </span>
+                <div className="flex-1 flex flex-wrap gap-x-3 gap-y-1">
+                  {Object.entries(entry.depts)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([dept, count]) => (
+                      <span key={dept} className="text-foreground">
+                        <span className="font-medium">{dept}</span>
+                        <span className="text-muted-foreground"> ({count})</span>
+                      </span>
+                    ))}
+                </div>
+                <span className="text-muted-foreground font-medium flex-shrink-0">
+                  {entry.total} students
+                </span>
               </div>
             );
           })}

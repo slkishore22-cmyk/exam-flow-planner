@@ -75,6 +75,37 @@ const FIXED_DEPT_COLORS: Record<string, { bg: string; text: string }> = {
 
 const deptColorMap: Record<string, { bg: string; text: string }> = {};
 
+// Highly distinct palette for exam codes — each color is from a different hue family
+// so no two are visually close shades.
+const EXAM_CODE_PALETTE: { bg: string; text: string }[] = [
+  { bg: '#E53935', text: '#FFFFFF' }, // red
+  { bg: '#1E88E5', text: '#FFFFFF' }, // blue
+  { bg: '#43A047', text: '#FFFFFF' }, // green
+  { bg: '#FDD835', text: '#000000' }, // yellow
+  { bg: '#8E24AA', text: '#FFFFFF' }, // purple
+  { bg: '#FB8C00', text: '#000000' }, // orange
+  { bg: '#00ACC1', text: '#FFFFFF' }, // cyan
+  { bg: '#EC407A', text: '#FFFFFF' }, // pink
+  { bg: '#3949AB', text: '#FFFFFF' }, // indigo
+  { bg: '#6D4C41', text: '#FFFFFF' }, // brown
+  { bg: '#00897B', text: '#FFFFFF' }, // teal
+  { bg: '#7CB342', text: '#000000' }, // lime
+  { bg: '#5E35B1', text: '#FFFFFF' }, // deep purple
+  { bg: '#F4511E', text: '#FFFFFF' }, // deep orange
+  { bg: '#546E7A', text: '#FFFFFF' }, // blue grey
+  { bg: '#C0CA33', text: '#000000' }, // olive
+];
+
+const examCodeColorMap: Record<string, { bg: string; text: string }> = {};
+
+export function getExamCodeColor(examCode: string): { bg: string; text: string } {
+  if (!examCodeColorMap[examCode]) {
+    const idx = Object.keys(examCodeColorMap).length;
+    examCodeColorMap[examCode] = EXAM_CODE_PALETTE[idx % EXAM_CODE_PALETTE.length];
+  }
+  return examCodeColorMap[examCode];
+}
+
 export function getDeptColor(dept: string): { bg: string; text: string } {
   if (FIXED_DEPT_COLORS[dept]) return FIXED_DEPT_COLORS[dept];
 
