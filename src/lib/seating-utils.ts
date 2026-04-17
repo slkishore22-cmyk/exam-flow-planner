@@ -288,32 +288,8 @@ export function allocateRooms(
   students: StudentRecord[],
   config: RoomConfig
 ): AllocationResult {
-  const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
-  const totalCols = mainColumns * seatsPerColumn;
-  const rows = Math.ceil(studentsPerRoom / totalCols);
-  const total = students.length;
-  const roomsNeeded = Math.max(1, Math.ceil(total / studentsPerRoom));
-
-  const rooms: RoomAllocation[] = [];
-  for (let r = 0; r < roomsNeeded; r++) {
-    const grid: (StudentRecord | null)[][] = Array.from(
-      { length: rows },
-      () => Array(totalCols).fill(null)
-    );
-    rooms.push({
-      roomNumber: r + 1,
-      students: [],
-      grid,
-      totalRows: rows,
-      seatsPerRow: totalCols,
-    });
-  }
-
-  const patternDecision: PatternDecision = {
-    pattern: 'CRISS_CROSS',
-    message: null,
-    violations: 0,
-  };
-
-  return { rooms, patternDecision };
+  // Delegate to the dedicated seating algorithm module
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { allocateSeating } = require('./seating-algorithm');
+  return allocateSeating(students, config);
 }
