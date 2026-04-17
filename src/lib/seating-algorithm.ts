@@ -67,173 +67,19 @@ function buildRoomSlots(rows: number, mainCols: number, subCols: number): RoomSl
   return slots;
 }
 
-// ============================================================
-// GENERAL EXAM SEATING
-// Layout: fixed 5 rows × 6 cols = 30 seats per room.
-// Columns alternate A,B,A,B,A,B → 15 Group A + 15 Group B.
-// Rules:
-//   • Total rooms = ceil(generalTotal / 30).
-//   • Departments sorted by count desc.
-//   • LARGEST dept fills Group A, starting room 0, fresh room per new dept.
-//   • All other depts queue through Group B.
-//   • Each new dept STARTS in a fresh room (its primary group empty there).
-//   • Leftovers (dept overflow) get parked, then placed at the START of the
-//     NEXT dept's fresh room block in Group B — sitting next to the new dept.
-// ============================================================
-
-const GENERAL_ROWS = 5;
-const GENERAL_MAIN_COLS = 3;
-const GENERAL_SUB_COLS = 2;
-const GENERAL_TOTAL_COLS = GENERAL_MAIN_COLS * GENERAL_SUB_COLS; // 6
-const GENERAL_SEATS_PER_ROOM = GENERAL_ROWS * GENERAL_TOTAL_COLS; // 30
-const GENERAL_GROUP_SIZE = 15; // A or B per room
-
-function buildGeneralRoomSlots(): { A: SeatPosition[]; B: SeatPosition[] } {
-  const A: SeatPosition[] = [];
-  const B: SeatPosition[] = [];
-  for (let r = 0; r < GENERAL_ROWS; r++) {
-    for (let c = 0; c < GENERAL_TOTAL_COLS; c++) {
-      const g: 'A' | 'B' = c % 2 === 0 ? 'A' : 'B';
-      (g === 'A' ? A : B).push({ row: r, col: c, group: g });
-    }
-  }
-  // Fill column-block by column-block, then row, then col — keeps students contiguous.
-  const sorter = (a: SeatPosition, b: SeatPosition) => {
-    const am = Math.floor(a.col / GENERAL_SUB_COLS);
-    const bm = Math.floor(b.col / GENERAL_SUB_COLS);
-    if (am !== bm) return am - bm;
-    if (a.row !== b.row) return a.row - b.row;
-    return a.col - b.col;
-  };
-  A.sort(sorter);
-  B.sort(sorter);
-  return { A, B };
-}
-
-function buildGeneralRooms(
-  generalStudents: StudentRecord[],
-  startingRoomNumber: number
-): RoomAllocation[] {
-  if (generalStudents.length === 0) return [];
-
-  const roomsNeeded = Math.ceil(generalStudents.length / GENERAL_SEATS_PER_ROOM);
-  const rooms: RoomAllocation[] = [];
-  const slotsPerRoom: { A: SeatPosition[]; B: SeatPosition[] }[] = [];
-  const usedA: number[] = [];
-  const usedB: number[] = [];
-
-  for (let i = 0; i < roomsNeeded; i++) {
-    const grid: (StudentRecord | null)[][] = Array.from(
-      { length: GENERAL_ROWS },
-      () => Array(GENERAL_TOTAL_COLS).fill(null)
-    );
-    rooms.push({
-      roomNumber: startingRoomNumber + i,
-      students: [],
-      grid,
-      totalRows: GENERAL_ROWS,
-      seatsPerRow: GENERAL_TOTAL_COLS,
-      mainColumns: GENERAL_MAIN_COLS,
-      seatsPerColumn: GENERAL_SUB_COLS,
-      isGeneral: true,
-    });
-    slotsPerRoom.push(buildGeneralRoomSlots());
-    usedA.push(0);
-    usedB.push(0);
-  }
-
-  // Group by department and sort by size desc, roll number asc within
-  const deptMap = new Map<string, StudentRecord[]>();
-  for (const s of generalStudents) {
-    const key = s.department.trim().toUpperCase();
-    if (!deptMap.has(key)) deptMap.set(key, []);
-    deptMap.get(key)!.push(s);
-  }
-  const depts = Array.from(deptMap.entries())
-    .map(([name, list]) => ({
-      name,
-      students: [...list].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber)),
-    }))
-    .sort((a, b) => {
-      if (b.students.length !== a.students.length) return b.students.length - a.students.length;
-      return a.name.localeCompare(b.name);
-    });
-
-  if (depts.length === 0) return rooms;
-
-  const placeAt = (
-    roomIdx: number,
-    group: 'A' | 'B',
-    student: StudentRecord
-  ): boolean => {
-    if (roomIdx >= rooms.length) return false;
-    const slots = slotsPerRoom[roomIdx][group];
-    const used = group === 'A' ? usedA : usedB;
-    if (used[roomIdx] >= slots.length) return false;
-    const pos = slots[used[roomIdx]];
-    rooms[roomIdx].grid[pos.row][pos.col] = student;
-    rooms[roomIdx].students.push(student);
-    used[roomIdx]++;
-    return true;
-  };
-
-  // Largest dept → Group A from room 0
-  let cursorA = 0;
-  const largest = depts[0];
-  let placedCount = 0;
-  for (const student of largest.students) {
-    // Move to next room when current A is full
-    while (cursorA < rooms.length && usedA[cursorA] >= GENERAL_GROUP_SIZE) cursorA++;
-    if (cursorA >= rooms.length) break;
-    if (placeAt(cursorA, 'A', student)) placedCount++;
-  }
-  // Largest's leftovers (couldn't fit in A) → parked, will join B queue at front
-  let parked: StudentRecord[] = largest.students.slice(placedCount);
-
-  // Remaining depts → Group B, fresh-room-per-dept; parked leftovers ride in next dept's fresh block
-  let cursorB = 0;
-  for (let d = 1; d < depts.length; d++) {
-    const dept = depts[d];
-    // Fresh room: advance cursorB to a room where B is empty
-    while (cursorB < rooms.length && usedB[cursorB] > 0) cursorB++;
-    if (cursorB >= rooms.length) {
-      // No fresh room left — park everything that didn't fit (won't be placed)
-      parked = parked.concat(dept.students);
-      continue;
-    }
-
-    // Combined queue: parked (from previous dept) first, then this dept's students
-    const queue: StudentRecord[] = [...parked, ...dept.students];
-    parked = [];
-
-    let i = 0;
-    let roomIdx = cursorB;
-    while (i < queue.length && roomIdx < rooms.length) {
-      while (roomIdx < rooms.length && usedB[roomIdx] >= GENERAL_GROUP_SIZE) roomIdx++;
-      if (roomIdx >= rooms.length) break;
-      if (placeAt(roomIdx, 'B', queue[i])) {
-        i++;
-      } else {
-        roomIdx++;
-      }
-    }
-    // Whatever didn't fit becomes new parked for the next dept iteration
-    parked = queue.slice(i);
-    cursorB = roomIdx;
-  }
-
-  return rooms;
-}
+// NOTE: General-exam seating logic has been removed. A new system will be
+// designed from scratch. For now, students flagged `isGeneral` are excluded
+// from normal allocation and produce no rooms.
 
 export function allocateSeating(
   students: StudentRecord[],
   config: RoomConfig
 ): AllocationResult {
-  const generalStudents = students.filter((s) => s.isGeneral);
+  // General-exam students are set aside — no rooms are produced for them yet.
   const normalStudents = students.filter((s) => !s.isGeneral);
 
-  const generalRooms = buildGeneralRooms(generalStudents, 1);
-  const normalStartingRoomNumber = generalRooms.length + 1;
+  const generalRooms: RoomAllocation[] = [];
+  const normalStartingRoomNumber = 1;
 
   const { studentsPerRoom, mainColumns, seatsPerColumn } = config;
   const totalCols = mainColumns * seatsPerColumn;
