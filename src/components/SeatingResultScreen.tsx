@@ -104,32 +104,35 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const totalViolations = roomViolations.reduce((sum, v) => sum + v.count, 0);
 
   // Determine seat type label based on position
-  const getSeatTypeLabel = (rowIdx: number, colIdx: number): string => {
-    const sc = colIdx % config.seatsPerColumn;
-    if (sc === 0 || sc === config.seatsPerColumn - 1) return 'A';
+  const getSeatTypeLabel = (rowIdx: number, colIdx: number, seatsPerColumn: number): string => {
+    const sc = colIdx % seatsPerColumn;
+    if (sc === 0 || sc === seatsPerColumn - 1) return 'A';
     return 'B';
   };
 
   const renderRoomGrid = (room: RoomAllocation, roomIndex: number, forPrint = false) => {
     const violations = roomViolations[roomIndex];
     const showReveal = !forPrint;
+    const isGeneral = !!room.isGeneral;
+    const mainColumns = room.mainColumns ?? config.mainColumns;
+    const seatsPerColumn = room.seatsPerColumn ?? config.seatsPerColumn;
 
     return (
       <table className="border-collapse mx-auto" style={{ borderSpacing: 0 }}>
         <thead>
           <tr>
-            {Array.from({ length: config.mainColumns }).map((_, mc) => (
+            {Array.from({ length: mainColumns }).map((_, mc) => (
               <React.Fragment key={mc}>
-                {Array.from({ length: config.seatsPerColumn }).map((_, sc) => (
+                {Array.from({ length: seatsPerColumn }).map((_, sc) => (
                   <th
                     key={`${mc}-${sc}`}
                     className="border border-border px-2 py-2 text-xs font-semibold bg-secondary text-secondary-foreground"
                     style={{ minWidth: 90 }}
                   >
-                    {mc * config.seatsPerColumn + sc + 1}
+                    {mc * seatsPerColumn + sc + 1}
                   </th>
                 ))}
-                {mc < config.mainColumns - 1 && (
+                {mc < mainColumns - 1 && (
                   <th className="w-4 border-none" style={{ minWidth: 16 }} />
                 )}
               </React.Fragment>
@@ -140,16 +143,16 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           {room.grid.map((row, rowIdx) => (
             <tr key={rowIdx}>
               {row.map((student, colIdx) => {
-                const mc = Math.floor(colIdx / config.seatsPerColumn);
-                const sc = colIdx % config.seatsPerColumn;
-                const isLastSubCol = sc === config.seatsPerColumn - 1;
-                const isLastMainCol = mc === config.mainColumns - 1;
+                const mc = Math.floor(colIdx / seatsPerColumn);
+                const sc = colIdx % seatsPerColumn;
+                const isLastSubCol = sc === seatsPerColumn - 1;
+                const isLastMainCol = mc === mainColumns - 1;
                 const showSeparator = isLastSubCol && !isLastMainCol;
 
                 const isOccupied = student !== null;
                 const isVisible = forPrint ? true : (isOccupied && visibleExamCodes.has(student!.examCode));
                 const isViolation = violations?.violatedCells.has(`${rowIdx}-${colIdx}`);
-                const seatLabel = getSeatTypeLabel(rowIdx, colIdx);
+                const seatLabel = isGeneral ? 'A' : getSeatTypeLabel(rowIdx, colIdx, seatsPerColumn);
 
                 let cellContent: React.ReactNode;
                 let cellBg: string;
@@ -157,7 +160,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
 
                 if (!isOccupied) {
                   // Empty seat — colorless cell with small group label (A/B/C/D)
-                  const group = getGroupLabel(rowIdx, colIdx, config.seatsPerColumn);
+                  const group = isGeneral ? 'A' : getGroupLabel(rowIdx, colIdx, seatsPerColumn);
                   cellBg = 'hsl(var(--background))';
                   cellBorder = '1px solid hsl(var(--border))';
                   cellContent = (
