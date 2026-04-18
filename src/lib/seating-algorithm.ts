@@ -335,22 +335,39 @@ export function allocateSeating(
     const codeReservations = resByCode.get(code.examCode) ?? [];
     if (codeReservations.length === 0) continue;
 
-    // Build flat queue: largest dept first, all its students, then next dept, etc.
+    // ============================================================
+    // BULLETPROOF QUEUE BUILD:
+    // Re-sort departments here (defensive) by size DESC, then build
+    // a STRICTLY ORDERED flat queue: ALL students of dept[0] first,
+    // then ALL students of dept[1], etc. NEVER interleaved.
+    // ============================================================
+    const deptsSorted = [...code.departments].sort((a, b) => {
+      if (b.students.length !== a.students.length) return b.students.length - a.students.length;
+      return a.department.localeCompare(b.department);
+    });
+
     const queue: StudentRecord[] = [];
-    for (const dept of code.departments) {
+    for (const dept of deptsSorted) {
       for (const student of dept.students) queue.push(student);
+    }
+
+    // Diagnostic: log the exact queue order for verification
+    if (typeof console !== 'undefined') {
+      const summary = deptsSorted.map(d => `${d.department}=${d.students.length}`).join(', ');
+      const first = queue.slice(0, 3).map(s => `${s.department}/${s.rollNumber}`).join(' | ');
+      const boundary = queue.length > deptsSorted[0].students.length
+        ? `boundary @ idx ${deptsSorted[0].students.length}: ${queue[deptsSorted[0].students.length - 1].department}/${queue[deptsSorted[0].students.length - 1].rollNumber} → ${queue[deptsSorted[0].students.length].department}/${queue[deptsSorted[0].students.length].rollNumber}`
+        : 'single dept';
+      console.log(`[ALLOC ${code.examCode}] depts: ${summary} | first: ${first} | ${boundary}`);
     }
 
     let qIdx = 0;
     for (const res of codeReservations) {
-      const slots = res.group === 'A' ? null : null; // placeholder
       const groupSize = res.group === 'A' ? groupASize : groupBSize;
-      // Walk through reserved rooms one by one, fill seats linearly
       for (let rOffset = 0; rOffset < res.roomCount && qIdx < queue.length; rOffset++) {
         const roomIdx = res.startRoom + rOffset;
         const roomSlotList = roomSlots[roomIdx][res.group];
         const usedArr = res.group === 'A' ? usedA : usedB;
-        // Fill all seats of this group in this room (or until queue empty)
         while (usedArr[roomIdx] < groupSize && qIdx < queue.length) {
           const pos = roomSlotList[usedArr[roomIdx]];
           rooms[roomIdx].grid[pos.row][pos.col] = queue[qIdx];
