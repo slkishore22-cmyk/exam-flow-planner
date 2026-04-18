@@ -277,11 +277,12 @@ export function allocateSeating(
 
   const fillDepartmentSeries = (
     group: 'A' | 'B',
-    departments: { department: string; students: StudentRecord[] }[]
+    departments: { department: string; students: StudentRecord[] }[],
+    startSearchFrom: number = 0
   ) => {
     const groupSize = group === 'A' ? groupASize : groupBSize;
     // Always start at the next ACTUALLY-empty room in this group, not a stale cursor.
-    let cursor = findNextFreshRoom(group, 0);
+    let cursor = findNextFreshRoom(group, startSearchFrom);
     let deptIndex = 0;
     let studentIndex = 0;
 
@@ -311,12 +312,15 @@ export function allocateSeating(
       cursor = findNextFreshRoom(group, cursor + 1);
     }
 
-    return departments.slice(deptIndex).map((department, index) => ({
+    const remaining = departments.slice(deptIndex).map((department, index) => ({
       department: department.department,
       students: index === 0 && studentIndex > 0
         ? department.students.slice(studentIndex)
         : [...department.students],
     }));
+    // Track the first room this code touched (for spill alignment).
+    const firstRoomUsed = findNextFreshRoom(group, startSearchFrom);
+    return { remaining, firstRoomUsed };
   };
 
   for (const code of sortedCodes) {
@@ -327,10 +331,17 @@ export function allocateSeating(
       students: [...departmentBlock.students],
     }));
 
-    remainingDepartments = fillDepartmentSeries(primary, remainingDepartments);
+    // Snapshot the first fresh room of the primary group BEFORE filling,
+    // so when we spill into the secondary group we start from the SAME room
+    // (avoids skipping rooms whose secondary group is empty).
+    const primaryStartRoom = findNextFreshRoom(primary, 0);
+    const primaryResult = fillDepartmentSeries(primary, remainingDepartments);
+    remainingDepartments = primaryResult.remaining;
 
     if (remainingDepartments.length > 0) {
-      fillDepartmentSeries(secondary, remainingDepartments);
+      // Spill into the secondary group starting at the same room block as primary,
+      // so MAM4P (primary A rooms 46-51) overflows into B of rooms 46-51 first.
+      fillDepartmentSeries(secondary, remainingDepartments, primaryStartRoom);
     }
 
     useA = !useA;
