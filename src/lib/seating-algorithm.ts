@@ -229,7 +229,13 @@ export function allocateSeating(
         })
         .map(({ department, students: deptStudents }) => ({
           department,
-          students: [...deptStudents].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber)),
+          students: [...deptStudents].sort((a, b) => {
+            // Numeric-aware sort: extract trailing digits so BBA99 < BBA100
+            const aNum = parseInt(a.rollNumber.replace(/\D/g, ''), 10);
+            const bNum = parseInt(b.rollNumber.replace(/\D/g, ''), 10);
+            if (!isNaN(aNum) && !isNaN(bNum) && aNum !== bNum) return aNum - bNum;
+            return a.rollNumber.localeCompare(b.rollNumber);
+          }),
         }));
 
       return {
