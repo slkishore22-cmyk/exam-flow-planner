@@ -241,6 +241,13 @@ export function allocateSeating(
     .sort((a, b) => b.totalCount - a.totalCount)
     .filter((code) => code.totalCount >= 100);
 
+  // Diagnostic: log dept order per code so you can verify largest-first
+  console.log('[ALLOC] Exam codes (size desc, >=100 only):');
+  for (const c of sortedCodes) {
+    const deptSummary = c.departments.map(d => `${d.department}(${d.students.length})`).join(', ');
+    console.log(`[ALLOC]   ${c.examCode} total=${c.totalCount} → ${deptSummary}`);
+  }
+
   // ============================================================
   // NEW APPROACH: Reserve room ranges per (code, group) up front.
   // Then fill each reservation linearly with departments in order.
