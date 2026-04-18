@@ -212,26 +212,6 @@ export async function extractRollNumbersFromPdf(
   };
 }
 
-/**
- * Canonicalize a department name so that "BBA", "B B A", "B.B.A.", "bba "
- * all map to the same key. This is critical: the seating algorithm groups
- * students by department string, so any variance splits a single department
- * into multiple buckets and breaks the "largest dept first" ordering.
- */
-export function canonicalizeDepartment(raw: string): string {
-  if (!raw) return 'UNKNOWN';
-  return raw
-    .toUpperCase()
-    .replace(/\s+/g, '')   // remove ALL whitespace
-    .replace(/\.+/g, '')   // remove ALL dots
-    .trim() || 'UNKNOWN';
-}
-
-export function canonicalizeExamCode(raw: string): string {
-  if (!raw) return 'UNKNOWN';
-  return raw.toUpperCase().replace(/\s+/g, '').trim() || 'UNKNOWN';
-}
-
 export function deduplicateStudents(
   results: PdfExtractionResult[]
 ): StudentRecord[] {
@@ -244,8 +224,8 @@ export function deduplicateStudents(
         seen.add(entry.roll);
         students.push({
           rollNumber: entry.roll,
-          department: canonicalizeDepartment(entry.dept),
-          examCode: canonicalizeExamCode(entry.examCode),
+          department: entry.dept,
+          examCode: entry.examCode,
           sourcePdf: result.fileName,
         });
       }
