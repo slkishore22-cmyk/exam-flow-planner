@@ -287,6 +287,8 @@ export function allocateSeating(
 
     while (deptIndex < departments.length && cursor < roomsNeeded) {
       let placed = 0;
+      const startDeptIdx = deptIndex;
+      const roomNoForLog = rooms[cursor].roomNumber;
       while (placed < groupSize && deptIndex < departments.length) {
         const currentDepartment = departments[deptIndex];
         const student = currentDepartment.students[studentIndex];
@@ -306,6 +308,10 @@ export function allocateSeating(
           studentIndex = 0;
         }
       }
+
+      const deptsTouched = departments.slice(startDeptIdx, deptIndex + (studentIndex > 0 ? 1 : 0))
+        .map(d => d.department).join('+');
+      console.log(`[ALLOC]   room ${roomNoForLog} ${group}: placed=${placed} depts=[${deptsTouched}]`);
 
       // Move to the next empty room of this group (skip rooms already used).
       cursor = findNextFreshRoom(group, cursor + 1);
@@ -327,9 +333,14 @@ export function allocateSeating(
       students: [...departmentBlock.students],
     }));
 
+    console.log(`[ALLOC] Code ${code.examCode} (total ${code.totalCount}) → primary=${primary}`,
+      remainingDepartments.map(d => `${d.department}:${d.students.length}`).join(', '));
+
     remainingDepartments = fillDepartmentSeries(primary, remainingDepartments);
 
     if (remainingDepartments.length > 0) {
+      console.log(`[ALLOC]   overflow to ${secondary}:`,
+        remainingDepartments.map(d => `${d.department}:${d.students.length}`).join(', '));
       fillDepartmentSeries(secondary, remainingDepartments);
     }
 
