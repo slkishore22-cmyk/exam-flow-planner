@@ -278,51 +278,45 @@ export function allocateSeating(
   const fillDepartmentSeries = (
     group: 'A' | 'B',
     departments: { department: string; students: StudentRecord[] }[]
-  ) => {
+  ): { department: string; students: StudentRecord[] }[] => {
+    // Flatten all students in strict department order (largest dept first,
+    // already pre-sorted by caller). This guarantees:
+    //   - The largest dept's students are placed BEFORE any smaller dept's
+    //   - No gaps between departments — leftover seats in the last room
+    //     of one dept are immediately filled by the next dept's students
+    //   - No rooms skipped — we always use findNextFreshRoom
+    const queue: { student: StudentRecord; deptIdx: number }[] = [];
+    departments.forEach((dept, idx) => {
+      dept.students.forEach((student) => queue.push({ student, deptIdx: idx }));
+    });
+
     const groupSize = group === 'A' ? groupASize : groupBSize;
-    // Always start at the next ACTUALLY-empty room in this group, not a stale cursor.
     let cursor = findNextFreshRoom(group, 0);
-    let deptIndex = 0;
-    let studentIndex = 0;
+    let qIdx = 0;
 
-    while (deptIndex < departments.length && cursor < roomsNeeded) {
+    while (qIdx < queue.length && cursor < roomsNeeded) {
       let placed = 0;
-      const startDeptIdx = deptIndex;
-      const roomNoForLog = rooms[cursor].roomNumber;
-      while (placed < groupSize && deptIndex < departments.length) {
-        const currentDepartment = departments[deptIndex];
-        const student = currentDepartment.students[studentIndex];
-        if (!student) {
-          deptIndex++;
-          studentIndex = 0;
-          continue;
-        }
-
-        if (!placeAt(cursor, group, student)) break;
-
-        studentIndex++;
+      while (placed < groupSize && qIdx < queue.length) {
+        if (!placeAt(cursor, group, queue[qIdx].student)) break;
+        qIdx++;
         placed++;
-
-        if (studentIndex >= currentDepartment.students.length) {
-          deptIndex++;
-          studentIndex = 0;
-        }
       }
-
-      const deptsTouched = departments.slice(startDeptIdx, deptIndex + (studentIndex > 0 ? 1 : 0))
-        .map(d => d.department).join('+');
-      console.log(`[ALLOC]   room ${roomNoForLog} ${group}: placed=${placed} depts=[${deptsTouched}]`);
-
-      // Move to the next empty room of this group (skip rooms already used).
       cursor = findNextFreshRoom(group, cursor + 1);
     }
 
-    return departments.slice(deptIndex).map((department, index) => ({
-      department: department.department,
-      students: index === 0 && studentIndex > 0
-        ? department.students.slice(studentIndex)
-        : [...department.students],
-    }));
+    if (qIdx >= queue.length) return [];
+    const remainingByDept = new Map<number, StudentRecord[]>();
+    for (let i = qIdx; i < queue.length; i++) {
+      const { student, deptIdx } = queue[i];
+      if (!remainingByDept.has(deptIdx)) remainingByDept.set(deptIdx, []);
+      remainingByDept.get(deptIdx)!.push(student);
+    }
+    return Array.from(remainingByDept.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([idx, students]) => ({
+        department: departments[idx].department,
+        students,
+      }));
   };
 
   for (const code of sortedCodes) {
@@ -333,14 +327,9 @@ export function allocateSeating(
       students: [...departmentBlock.students],
     }));
 
-    console.log(`[ALLOC] Code ${code.examCode} (total ${code.totalCount}) → primary=${primary}`,
-      remainingDepartments.map(d => `${d.department}:${d.students.length}`).join(', '));
-
     remainingDepartments = fillDepartmentSeries(primary, remainingDepartments);
 
     if (remainingDepartments.length > 0) {
-      console.log(`[ALLOC]   overflow to ${secondary}:`,
-        remainingDepartments.map(d => `${d.department}:${d.students.length}`).join(', '));
       fillDepartmentSeries(secondary, remainingDepartments);
     }
 
