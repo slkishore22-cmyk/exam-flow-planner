@@ -76,17 +76,17 @@ export function allocateNormalRooms(
     u.students.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
   }
 
-  // EVERY (examCode, department) unit gets fresh-room placement — no size filter.
-  // Sort largest first so big units secure their primary group; small units fill
-  // remaining capacity in fresh rooms after the big ones.
+  // Only units with >=100 students go through the reserve-then-fill logic.
+  // Sort largest first, ties broken by examCode then department for stability.
   const sortedUnits: CodeDeptUnit[] = Array.from(unitMap.values())
+    .filter((u) => u.students.length >= 100)
     .sort((a, b) => {
       if (b.students.length !== a.students.length) return b.students.length - a.students.length;
       if (a.examCode !== b.examCode) return a.examCode.localeCompare(b.examCode);
       return a.department.localeCompare(b.department);
     });
 
-  console.log('[ALLOC] Code+Dept units (size desc, ALL units):');
+  console.log('[ALLOC] Code+Dept units (size desc, >=100 only):');
   for (const u of sortedUnits) {
     console.log(`[ALLOC]   ${u.examCode} [${u.department}] = ${u.students.length}`);
   }
