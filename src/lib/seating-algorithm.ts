@@ -241,101 +241,119 @@ export function allocateSeating(
     .sort((a, b) => b.totalCount - a.totalCount)
     .filter((code) => code.totalCount >= 100);
 
-  // Helper: place a student at a room/group slot
-  const placeAt = (
-    roomIdx: number,
-    group: 'A' | 'B',
-    student: StudentRecord
-  ): boolean => {
-    const slots = roomSlots[roomIdx][group];
-    const used = group === 'A' ? usedA : usedB;
-    if (used[roomIdx] >= slots.length) return false;
-    const pos = slots[used[roomIdx]];
-    rooms[roomIdx].grid[pos.row][pos.col] = student;
-    rooms[roomIdx].students.push(student);
-    used[roomIdx]++;
-    return true;
+  // ============================================================
+  // NEW APPROACH: Reserve room ranges per (code, group) up front.
+  // Then fill each reservation linearly with departments in order.
+  // No "find next fresh room" — strictly sequential, no skipping.
+  // ============================================================
+
+  type Reservation = {
+    code: typeof sortedCodes[number];
+    group: 'A' | 'B';
+    startRoom: number;  // index into rooms[]
+    roomCount: number;
+    seats: number;      // total seats reserved (roomCount * groupSize)
   };
 
-  // Find the next room where the given group is still empty (used count = 0).
-  // This prevents skipping rooms that another code's overflow may have left untouched.
-  const findNextFreshRoom = (group: 'A' | 'B', startFrom: number): number => {
-    const used = group === 'A' ? usedA : usedB;
-    let i = startFrom;
-    while (i < roomsNeeded && used[i] !== 0) i++;
-    return i;
-  };
-
-  // Alternating A/B fill with biggest codes.
-  // Each code starts on a fresh room in its target group, but departments
-  // within the same code are placed back-to-back with no artificial gap.
-  // If a department ends with leftover seats in the current room/group,
-  // the next department of the SAME exam code continues there.
-  // If the preferred group runs out of fresh rooms mid-code, continue the
-  // remaining students of that same code in the other group's fresh rooms.
+  const reservations: Reservation[] = [];
+  let nextRoomA = 0;
+  let nextRoomB = 0;
   let useA = true;
-
-  const fillDepartmentSeries = (
-    group: 'A' | 'B',
-    departments: { department: string; students: StudentRecord[] }[]
-  ): { department: string; students: StudentRecord[] }[] => {
-    // Flatten all students in strict department order (largest dept first,
-    // already pre-sorted by caller). This guarantees:
-    //   - The largest dept's students are placed BEFORE any smaller dept's
-    //   - No gaps between departments — leftover seats in the last room
-    //     of one dept are immediately filled by the next dept's students
-    //   - No rooms skipped — we always use findNextFreshRoom
-    const queue: { student: StudentRecord; deptIdx: number }[] = [];
-    departments.forEach((dept, idx) => {
-      dept.students.forEach((student) => queue.push({ student, deptIdx: idx }));
-    });
-
-    const groupSize = group === 'A' ? groupASize : groupBSize;
-    let cursor = findNextFreshRoom(group, 0);
-    let qIdx = 0;
-
-    while (qIdx < queue.length && cursor < roomsNeeded) {
-      let placed = 0;
-      while (placed < groupSize && qIdx < queue.length) {
-        if (!placeAt(cursor, group, queue[qIdx].student)) break;
-        qIdx++;
-        placed++;
-      }
-      cursor = findNextFreshRoom(group, cursor + 1);
-    }
-
-    if (qIdx >= queue.length) return [];
-    const remainingByDept = new Map<number, StudentRecord[]>();
-    for (let i = qIdx; i < queue.length; i++) {
-      const { student, deptIdx } = queue[i];
-      if (!remainingByDept.has(deptIdx)) remainingByDept.set(deptIdx, []);
-      remainingByDept.get(deptIdx)!.push(student);
-    }
-    return Array.from(remainingByDept.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([idx, students]) => ({
-        department: departments[idx].department,
-        students,
-      }));
-  };
 
   for (const code of sortedCodes) {
     const primary: 'A' | 'B' = useA ? 'A' : 'B';
     const secondary: 'A' | 'B' = useA ? 'B' : 'A';
-    let remainingDepartments = code.departments.map((departmentBlock) => ({
-      department: departmentBlock.department,
-      students: [...departmentBlock.students],
-    }));
-
-    remainingDepartments = fillDepartmentSeries(primary, remainingDepartments);
-
-    if (remainingDepartments.length > 0) {
-      fillDepartmentSeries(secondary, remainingDepartments);
-    }
-
     useA = !useA;
 
-    if (findNextFreshRoom('A', 0) >= roomsNeeded && findNextFreshRoom('B', 0) >= roomsNeeded) break;
+    const primarySize = primary === 'A' ? groupASize : groupBSize;
+    const secondarySize = secondary === 'A' ? groupASize : groupBSize;
+
+    const totalStudents = code.totalCount;
+
+    // How many rooms are still available in primary group?
+    const primaryAvailable = roomsNeeded - (primary === 'A' ? nextRoomA : nextRoomB);
+    const primaryCapacity = primaryAvailable * primarySize;
+
+    let primaryStudents = Math.min(totalStudents, primaryCapacity);
+    let primaryRooms = Math.ceil(primaryStudents / primarySize);
+    let remaining = totalStudents - primaryStudents;
+
+    if (primaryRooms > 0) {
+      const startRoom = primary === 'A' ? nextRoomA : nextRoomB;
+      reservations.push({
+        code,
+        group: primary,
+        startRoom,
+        roomCount: primaryRooms,
+        seats: primaryRooms * primarySize,
+      });
+      if (primary === 'A') nextRoomA += primaryRooms;
+      else nextRoomB += primaryRooms;
+    }
+
+    if (remaining > 0) {
+      const secondaryAvailable = roomsNeeded - (secondary === 'A' ? nextRoomA : nextRoomB);
+      const secondaryRooms = Math.min(
+        secondaryAvailable,
+        Math.ceil(remaining / secondarySize)
+      );
+      if (secondaryRooms > 0) {
+        const startRoom = secondary === 'A' ? nextRoomA : nextRoomB;
+        reservations.push({
+          code,
+          group: secondary,
+          startRoom,
+          roomCount: secondaryRooms,
+          seats: secondaryRooms * secondarySize,
+        });
+        if (secondary === 'A') nextRoomA += secondaryRooms;
+        else nextRoomB += secondaryRooms;
+      }
+    }
+  }
+
+  // ============================================================
+  // Now fill each reservation linearly, department-by-department
+  // in strict size order. The student queue for the code is a
+  // flat list (largest dept first, then next largest, etc.).
+  // ============================================================
+
+  // Group reservations by code (preserving order)
+  const resByCode = new Map<string, Reservation[]>();
+  for (const r of reservations) {
+    if (!resByCode.has(r.code.examCode)) resByCode.set(r.code.examCode, []);
+    resByCode.get(r.code.examCode)!.push(r);
+  }
+
+  for (const code of sortedCodes) {
+    const codeReservations = resByCode.get(code.examCode) ?? [];
+    if (codeReservations.length === 0) continue;
+
+    // Build flat queue: largest dept first, all its students, then next dept, etc.
+    const queue: StudentRecord[] = [];
+    for (const dept of code.departments) {
+      for (const student of dept.students) queue.push(student);
+    }
+
+    let qIdx = 0;
+    for (const res of codeReservations) {
+      const slots = res.group === 'A' ? null : null; // placeholder
+      const groupSize = res.group === 'A' ? groupASize : groupBSize;
+      // Walk through reserved rooms one by one, fill seats linearly
+      for (let rOffset = 0; rOffset < res.roomCount && qIdx < queue.length; rOffset++) {
+        const roomIdx = res.startRoom + rOffset;
+        const roomSlotList = roomSlots[roomIdx][res.group];
+        const usedArr = res.group === 'A' ? usedA : usedB;
+        // Fill all seats of this group in this room (or until queue empty)
+        while (usedArr[roomIdx] < groupSize && qIdx < queue.length) {
+          const pos = roomSlotList[usedArr[roomIdx]];
+          rooms[roomIdx].grid[pos.row][pos.col] = queue[qIdx];
+          rooms[roomIdx].students.push(queue[qIdx]);
+          usedArr[roomIdx]++;
+          qIdx++;
+        }
+      }
+    }
   }
 
   return {
