@@ -1,15 +1,14 @@
 import { StudentRecord, RoomConfig, RoomAllocation } from '../seating-utils';
 import { buildRoomSlots, normalizeDepartmentKey, RoomSlots } from './room-slots';
 
-interface CodeDeptUnit {
+interface SortedCode {
   examCode: string;
-  department: string; // display form (upper-cased, trimmed)
-  deptKey: string;    // normalized key
-  students: StudentRecord[];
+  totalCount: number;
+  departments: { department: string; students: StudentRecord[] }[];
 }
 
 interface Reservation {
-  unit: CodeDeptUnit;
+  code: SortedCode;
   group: 'A' | 'B';
   startRoom: number;
   roomCount: number;
@@ -54,51 +53,52 @@ export function allocateNormalRooms(
   const usedA: number[] = Array(roomsNeeded).fill(0);
   const usedB: number[] = Array(roomsNeeded).fill(0);
 
-  // Build (examCode, department) units — each is treated as an independent block.
-  // Same exam code with different departments => different units => fresh rooms.
-  const unitMap = new Map<string, CodeDeptUnit>();
+  // Group + sort exam codes by count desc. Phase 1: only codes with >=100 students.
+  const byCode = new Map<string, StudentRecord[]>();
   for (const s of normalStudents) {
-    const deptKey = normalizeDepartmentKey(s.department);
-    const key = `${s.examCode}__${deptKey}`;
-    if (!unitMap.has(key)) {
-      unitMap.set(key, {
-        examCode: s.examCode,
-        department: s.department.trim().toUpperCase(),
-        deptKey,
-        students: [],
-      });
-    }
-    unitMap.get(key)!.students.push(s);
+    if (!byCode.has(s.examCode)) byCode.set(s.examCode, []);
+    byCode.get(s.examCode)!.push(s);
   }
 
-  // Sort each unit's roll numbers for stable placement.
-  for (const u of unitMap.values()) {
-    u.students.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
+  const sortedCodes: SortedCode[] = Array.from(byCode.entries())
+    .map(([examCode, list]) => {
+      const deptGroups = new Map<string, { department: string; students: StudentRecord[] }>();
+      for (const student of list) {
+        const key = normalizeDepartmentKey(student.department);
+        if (!deptGroups.has(key)) {
+          deptGroups.set(key, { department: student.department.trim().toUpperCase(), students: [] });
+        }
+        deptGroups.get(key)!.students.push(student);
+      }
+
+      const departments = Array.from(deptGroups.values())
+        .sort((a, b) => {
+          if (b.students.length !== a.students.length) return b.students.length - a.students.length;
+          return a.department.localeCompare(b.department);
+        })
+        .map(({ department, students: deptStudents }) => ({
+          department,
+          students: [...deptStudents].sort((a, b) => a.rollNumber.localeCompare(b.rollNumber)),
+        }));
+
+      return { examCode, totalCount: list.length, departments };
+    })
+    .sort((a, b) => b.totalCount - a.totalCount)
+    .filter((code) => code.totalCount >= 100);
+
+  console.log('[ALLOC] Exam codes (size desc, >=100 only):');
+  for (const c of sortedCodes) {
+    const deptSummary = c.departments.map((d) => `${d.department}(${d.students.length})`).join(', ');
+    console.log(`[ALLOC]   ${c.examCode} total=${c.totalCount} → ${deptSummary}`);
   }
 
-  // Only units with >=100 students go through the reserve-then-fill logic.
-  // Sort largest first, ties broken by examCode then department for stability.
-  const sortedUnits: CodeDeptUnit[] = Array.from(unitMap.values())
-    .filter((u) => u.students.length >= 100)
-    .sort((a, b) => {
-      if (b.students.length !== a.students.length) return b.students.length - a.students.length;
-      if (a.examCode !== b.examCode) return a.examCode.localeCompare(b.examCode);
-      return a.department.localeCompare(b.department);
-    });
-
-  console.log('[ALLOC] Code+Dept units (size desc, >=100 only):');
-  for (const u of sortedUnits) {
-    console.log(`[ALLOC]   ${u.examCode} [${u.department}] = ${u.students.length}`);
-  }
-
-  // Reserve room ranges per unit. Each unit starts in a FRESH room (no sharing
-  // with other units, even those with the same examCode).
+  // Reserve room ranges per (code, group) up front.
   const reservations: Reservation[] = [];
   let nextRoomA = 0;
   let nextRoomB = 0;
   let useA = true;
 
-  for (const unit of sortedUnits) {
+  for (const code of sortedCodes) {
     const primary: 'A' | 'B' = useA ? 'A' : 'B';
     const secondary: 'A' | 'B' = useA ? 'B' : 'A';
     useA = !useA;
@@ -106,7 +106,7 @@ export function allocateNormalRooms(
     const primarySize = primary === 'A' ? groupASize : groupBSize;
     const secondarySize = secondary === 'A' ? groupASize : groupBSize;
 
-    const totalStudents = unit.students.length;
+    const totalStudents = code.totalCount;
 
     const primaryAvailable = roomsNeeded - (primary === 'A' ? nextRoomA : nextRoomB);
     const primaryCapacity = primaryAvailable * primarySize;
@@ -117,7 +117,7 @@ export function allocateNormalRooms(
 
     if (primaryRooms > 0) {
       const startRoom = primary === 'A' ? nextRoomA : nextRoomB;
-      reservations.push({ unit, group: primary, startRoom, roomCount: primaryRooms, seats: primaryRooms * primarySize });
+      reservations.push({ code, group: primary, startRoom, roomCount: primaryRooms, seats: primaryRooms * primarySize });
       if (primary === 'A') nextRoomA += primaryRooms;
       else nextRoomB += primaryRooms;
     }
@@ -127,30 +127,31 @@ export function allocateNormalRooms(
       const secondaryRooms = Math.min(secondaryAvailable, Math.ceil(remaining / secondarySize));
       if (secondaryRooms > 0) {
         const startRoom = secondary === 'A' ? nextRoomA : nextRoomB;
-        reservations.push({ unit, group: secondary, startRoom, roomCount: secondaryRooms, seats: secondaryRooms * secondarySize });
+        reservations.push({ code, group: secondary, startRoom, roomCount: secondaryRooms, seats: secondaryRooms * secondarySize });
         if (secondary === 'A') nextRoomA += secondaryRooms;
         else nextRoomB += secondaryRooms;
       }
     }
   }
 
-  // Fill each reservation linearly with that unit's students.
-  const resByUnitKey = new Map<string, Reservation[]>();
+  // Fill each reservation linearly.
+  const resByCode = new Map<string, Reservation[]>();
   for (const r of reservations) {
-    const key = `${r.unit.examCode}__${r.unit.deptKey}`;
-    if (!resByUnitKey.has(key)) resByUnitKey.set(key, []);
-    resByUnitKey.get(key)!.push(r);
+    if (!resByCode.has(r.code.examCode)) resByCode.set(r.code.examCode, []);
+    resByCode.get(r.code.examCode)!.push(r);
   }
 
-  for (const unit of sortedUnits) {
-    const key = `${unit.examCode}__${unit.deptKey}`;
-    const unitReservations = resByUnitKey.get(key) ?? [];
-    if (unitReservations.length === 0) continue;
+  for (const code of sortedCodes) {
+    const codeReservations = resByCode.get(code.examCode) ?? [];
+    if (codeReservations.length === 0) continue;
 
-    const queue = [...unit.students];
+    const queue: StudentRecord[] = [];
+    for (const dept of code.departments) {
+      for (const student of dept.students) queue.push(student);
+    }
+
     let qIdx = 0;
-
-    for (const res of unitReservations) {
+    for (const res of codeReservations) {
       const groupSize = res.group === 'A' ? groupASize : groupBSize;
       for (let rOffset = 0; rOffset < res.roomCount && qIdx < queue.length; rOffset++) {
         const roomIdx = res.startRoom + rOffset;
