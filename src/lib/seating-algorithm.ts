@@ -59,10 +59,10 @@ function buildRoomSlots(rows: number, mainCols: number, subCols: number): RoomSl
     return a.col - b.col;
   };
 
-  slots.A.sort(sortByRoomBlock);
-  slots.B.sort(sortByRoomBlock);
-  slots.C.sort(sortByRoomBlock);
-  slots.D.sort(sortByRoomBlock);
+  slots.A.sort(sortByRowMajor);
+  slots.B.sort(sortByRowMajor);
+  slots.C.sort(sortByRowMajor);
+  slots.D.sort(sortByRowMajor);
 
   return slots;
 }
