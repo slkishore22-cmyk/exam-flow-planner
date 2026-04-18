@@ -327,9 +327,14 @@ export function allocateSeating(
       students: [...departmentBlock.students],
     }));
 
+    console.log(`[ALLOC] Code ${code.examCode} (total ${code.totalCount}) → primary=${primary}`,
+      remainingDepartments.map(d => `${d.department}:${d.students.length}`).join(', '));
+
     remainingDepartments = fillDepartmentSeries(primary, remainingDepartments);
 
     if (remainingDepartments.length > 0) {
+      console.log(`[ALLOC]   overflow to ${secondary}:`,
+        remainingDepartments.map(d => `${d.department}:${d.students.length}`).join(', '));
       fillDepartmentSeries(secondary, remainingDepartments);
     }
 
