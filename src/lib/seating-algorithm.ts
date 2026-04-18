@@ -51,18 +51,18 @@ function buildRoomSlots(rows: number, mainCols: number, subCols: number): RoomSl
     }
   }
 
-  const sortByRoomBlock = (a: SeatPosition, b: SeatPosition) => {
-    const aMainCol = Math.floor(a.col / subCols);
-    const bMainCol = Math.floor(b.col / subCols);
-    if (aMainCol !== bMainCol) return aMainCol - bMainCol;
+  // Row-major fill: walk left-to-right across the entire row, then move to
+  // the next row. This makes the visual order (reading top-to-bottom,
+  // left-to-right) match the placement order within each group.
+  const sortByRowMajor = (a: SeatPosition, b: SeatPosition) => {
     if (a.row !== b.row) return a.row - b.row;
     return a.col - b.col;
   };
 
-  slots.A.sort(sortByRoomBlock);
-  slots.B.sort(sortByRoomBlock);
-  slots.C.sort(sortByRoomBlock);
-  slots.D.sort(sortByRoomBlock);
+  slots.A.sort(sortByRowMajor);
+  slots.B.sort(sortByRowMajor);
+  slots.C.sort(sortByRowMajor);
+  slots.D.sort(sortByRowMajor);
 
   return slots;
 }
