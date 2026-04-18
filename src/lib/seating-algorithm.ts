@@ -351,15 +351,8 @@ export function allocateSeating(
       for (const student of dept.students) queue.push(student);
     }
 
-    // Diagnostic: log the exact queue order for verification
-    if (typeof console !== 'undefined') {
-      const summary = deptsSorted.map(d => `${d.department}=${d.students.length}`).join(', ');
-      const first = queue.slice(0, 3).map(s => `${s.department}/${s.rollNumber}`).join(' | ');
-      const boundary = queue.length > deptsSorted[0].students.length
-        ? `boundary @ idx ${deptsSorted[0].students.length}: ${queue[deptsSorted[0].students.length - 1].department}/${queue[deptsSorted[0].students.length - 1].rollNumber} → ${queue[deptsSorted[0].students.length].department}/${queue[deptsSorted[0].students.length].rollNumber}`
-        : 'single dept';
-      console.log(`[ALLOC ${code.examCode}] depts: ${summary} | first: ${first} | ${boundary}`);
-    }
+
+
 
     let qIdx = 0;
     for (const res of codeReservations) {
