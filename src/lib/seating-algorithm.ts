@@ -372,8 +372,84 @@ export function allocateSeating(
     }
   }
 
+  // ============================================================
+  // POST-PROCESS: Force "minor department" students within an exam
+  // code (depts that are NOT the largest within their code) to the
+  // absolute last seats of the final room. We swap their current
+  // placements with whoever currently occupies the last visible
+  // seats of the last room (bottom-right, walking right-to-left,
+  // bottom-to-top, skipping empty cells).
+  // ============================================================
+  const allRooms = [...generalRooms, ...rooms];
+  if (allRooms.length > 0) {
+    const minorStudents: { roomIdx: number; row: number; col: number }[] = [];
+    for (const code of sortedCodes) {
+      if (code.departments.length < 2) continue;
+      const minorKeys = new Set(
+        code.departments.slice(1).map((d) => normalizeDepartmentKey(d.department))
+      );
+      for (let ri = 0; ri < allRooms.length; ri++) {
+        const room = allRooms[ri];
+        for (let r = 0; r < room.grid.length; r++) {
+          for (let c = 0; c < room.grid[r].length; c++) {
+            const s = room.grid[r][c];
+            if (!s) continue;
+            if (s.examCode !== code.examCode) continue;
+            if (!minorKeys.has(normalizeDepartmentKey(s.department))) continue;
+            minorStudents.push({ roomIdx: ri, row: r, col: c });
+          }
+        }
+      }
+    }
+
+    if (minorStudents.length > 0) {
+      const lastRoomIdx = allRooms.length - 1;
+      const lastRoom = allRooms[lastRoomIdx];
+      const lastSeats: { row: number; col: number }[] = [];
+      for (let r = lastRoom.grid.length - 1; r >= 0; r--) {
+        for (let c = lastRoom.grid[r].length - 1; c >= 0; c--) {
+          if (lastRoom.grid[r][c] !== null) {
+            lastSeats.push({ row: r, col: c });
+          }
+        }
+      }
+
+      const swapCount = Math.min(minorStudents.length, lastSeats.length);
+      for (let i = 0; i < swapCount; i++) {
+        const minor = minorStudents[i];
+        const target = lastSeats[i];
+        if (
+          minor.roomIdx === lastRoomIdx &&
+          minor.row === target.row &&
+          minor.col === target.col
+        ) {
+          continue;
+        }
+        const minorCell = allRooms[minor.roomIdx].grid[minor.row][minor.col];
+        const targetCell = lastRoom.grid[target.row][target.col];
+        allRooms[minor.roomIdx].grid[minor.row][minor.col] = targetCell;
+        lastRoom.grid[target.row][target.col] = minorCell;
+      }
+
+      const affectedRoomIdxs = new Set<number>([
+        lastRoomIdx,
+        ...minorStudents.map((m) => m.roomIdx),
+      ]);
+      for (const ri of affectedRoomIdxs) {
+        const room = allRooms[ri];
+        const newStudents: StudentRecord[] = [];
+        for (const row of room.grid) {
+          for (const cell of row) {
+            if (cell) newStudents.push(cell);
+          }
+        }
+        room.students = newStudents;
+      }
+    }
+  }
+
   return {
-    rooms: [...generalRooms, ...rooms],
+    rooms: allRooms,
     patternDecision: { pattern: 'CRISS_CROSS', message: null, violations: 0 },
   };
 }
