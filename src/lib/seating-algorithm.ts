@@ -277,11 +277,12 @@ export function allocateSeating(
 
   const fillDepartmentSeries = (
     group: 'A' | 'B',
-    departments: { department: string; students: StudentRecord[] }[]
+    departments: { department: string; students: StudentRecord[] }[],
+    startSearchFrom: number = 0
   ) => {
     const groupSize = group === 'A' ? groupASize : groupBSize;
     // Always start at the next ACTUALLY-empty room in this group, not a stale cursor.
-    let cursor = findNextFreshRoom(group, 0);
+    let cursor = findNextFreshRoom(group, startSearchFrom);
     let deptIndex = 0;
     let studentIndex = 0;
 
