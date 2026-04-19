@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor, getGroupLabel } from '@/lib/seating-utils';
-import PrintSheet from './PrintSheet';
 
 interface SeatingResultScreenProps {
   rooms: RoomAllocation[];
@@ -375,9 +374,26 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         </div>
       </div>
 
-      {/* Print Sheet — A4 landscape, per-room printable layout */}
-      <div className="mt-10">
-        <PrintSheet rooms={rooms} />
+      {/* Print button */}
+      <div className="no-print mt-8 text-center">
+        <Button onClick={handlePrint} className="px-12 h-12 text-base rounded-xl">
+          Print All Rooms
+        </Button>
+      </div>
+
+      {/* Print-only: all rooms */}
+      <div ref={printRef} className="hidden print:block">
+        {rooms.map((room, i) => (
+          <div key={i} className={i < rooms.length - 1 ? 'print-page-break' : ''}>
+            <h2 className="text-xl font-bold text-center mb-4 mt-4">
+              Room {room.roomNumber} — {room.students.length} students
+              {roomViolations[i].count > 0 && (
+                <span style={{ color: '#EF4444' }}> — {roomViolations[i].count} violations</span>
+              )}
+            </h2>
+            {renderRoomGrid(room, i, true)}
+          </div>
+        ))}
       </div>
     </div>
   );
