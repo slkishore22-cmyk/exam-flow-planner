@@ -276,13 +276,13 @@ export function allocateSeating(
 
     const totalStudents = code.totalCount;
 
-    // How many rooms are still available in primary group?
-    const primaryAvailable = roomsNeeded - (primary === 'A' ? nextRoomA : nextRoomB);
-    const primaryCapacity = primaryAvailable * primarySize;
-
-    let primaryStudents = Math.min(totalStudents, primaryCapacity);
+    // Each group operates independently. A code stays in its primary group
+    // as long as it needs rooms — we'll grow the room array if necessary.
+    // Only spill to secondary if primary literally cannot fit (it always can
+    // since we can grow), so in practice spill never happens here.
+    let primaryStudents = totalStudents;
     let primaryRooms = Math.ceil(primaryStudents / primarySize);
-    let remaining = totalStudents - primaryStudents;
+    let remaining = 0;
 
     if (primaryRooms > 0) {
       const startRoom = primary === 'A' ? nextRoomA : nextRoomB;
