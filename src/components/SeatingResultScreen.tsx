@@ -13,6 +13,7 @@ interface SeatingResultScreenProps {
 const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, patternDecision, onBack }) => {
   const [activeRoom, setActiveRoom] = useState(0);
   const [visibleExamCodes, setVisibleExamCodes] = useState<Set<string>>(new Set());
+  const [printMode, setPrintMode] = useState<'all' | 'single' | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
