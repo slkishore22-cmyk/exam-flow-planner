@@ -100,10 +100,6 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     });
   }, [rooms]);
 
-  if (!rooms || rooms.length === 0) {
-    return <div className="text-center py-20 text-muted-foreground">No rooms to display.</div>;
-  }
-
   // Global department-shape map: examCodes sorted alphabetically across ALL rooms
   const deptShapeMap = useMemo(() => {
     const codes = new Set<string>();
@@ -114,11 +110,22 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     return map;
   }, [rooms]);
 
+  // Toggle a body class so we can scope print CSS to single vs all
+  useEffect(() => {
+    if (printMode === 'single') document.body.classList.add('print-single');
+    else document.body.classList.remove('print-single');
+    return () => document.body.classList.remove('print-single');
+  }, [printMode]);
+
+  if (!rooms || rooms.length === 0) {
+    return <div className="text-center py-20 text-muted-foreground">No rooms to display.</div>;
+  }
+
   const triggerPrint = (mode: 'all' | 'single') => {
     setPrintMode(mode);
     setTimeout(() => {
       window.print();
-      setTimeout(() => setPrintMode(null), 100);
+      setTimeout(() => setPrintMode(null), 200);
     }, 50);
   };
 
