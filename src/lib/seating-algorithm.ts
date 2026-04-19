@@ -370,6 +370,72 @@ export function allocateSeating(
         }
       }
     }
+
+    // ============================================================
+    // BACKFILL: If any reserved room/group for this code has empty
+    // seats (due to Math.ceil rounding leaving slack), pull students
+    // from this code's LAST occupied reservation room backward to
+    // fill those gaps. Keeps everything within the same exam code.
+    // ============================================================
+    type Slot = { roomIdx: number; group: 'A' | 'B'; slotIdx: number };
+    const emptySlots: Slot[] = [];
+    const filledSlots: Slot[] = [];
+    for (const res of codeReservations) {
+      const groupSize = res.group === 'A' ? groupASize : groupBSize;
+      const usedArr = res.group === 'A' ? usedA : usedB;
+      for (let rOffset = 0; rOffset < res.roomCount; rOffset++) {
+        const roomIdx = res.startRoom + rOffset;
+        const used = usedArr[roomIdx];
+        for (let s = 0; s < used; s++) {
+          filledSlots.push({ roomIdx, group: res.group, slotIdx: s });
+        }
+        for (let s = used; s < groupSize; s++) {
+          emptySlots.push({ roomIdx, group: res.group, slotIdx: s });
+        }
+      }
+    }
+
+    // Move from the END of filledSlots into the START of emptySlots,
+    // but only if the empty slot comes BEFORE the filled slot in order.
+    const slotOrder = (s: Slot) => s.roomIdx * 1000 + s.slotIdx + (s.group === 'A' ? 0 : 0.5);
+    emptySlots.sort((a, b) => slotOrder(a) - slotOrder(b));
+    filledSlots.sort((a, b) => slotOrder(a) - slotOrder(b));
+
+    let eIdx = 0;
+    let fIdx = filledSlots.length - 1;
+    while (eIdx < emptySlots.length && fIdx >= 0) {
+      const empty = emptySlots[eIdx];
+      const filled = filledSlots[fIdx];
+      if (slotOrder(empty) >= slotOrder(filled)) break;
+
+      const fromRoom = rooms[filled.roomIdx];
+      const fromSlot = roomSlots[filled.roomIdx][filled.group][filled.slotIdx];
+      const student = fromRoom.grid[fromSlot.row][fromSlot.col];
+      if (student) {
+        const toRoom = rooms[empty.roomIdx];
+        const toSlot = roomSlots[empty.roomIdx][empty.group][empty.slotIdx];
+        toRoom.grid[toSlot.row][toSlot.col] = student;
+        fromRoom.grid[fromSlot.row][fromSlot.col] = null;
+        const usedArrFrom = filled.group === 'A' ? usedA : usedB;
+        const usedArrTo = empty.group === 'A' ? usedA : usedB;
+        usedArrFrom[filled.roomIdx]--;
+        usedArrTo[empty.roomIdx]++;
+      }
+      eIdx++;
+      fIdx--;
+    }
+
+    // Resync students[] for any rooms touched by this code
+    const touched = new Set<number>();
+    for (const res of codeReservations) {
+      for (let r = 0; r < res.roomCount; r++) touched.add(res.startRoom + r);
+    }
+    for (const ri of touched) {
+      const room = rooms[ri];
+      const fresh: StudentRecord[] = [];
+      for (const row of room.grid) for (const cell of row) if (cell) fresh.push(cell);
+      room.students = fresh;
+    }
   }
 
   // ============================================================
