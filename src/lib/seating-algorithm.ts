@@ -318,6 +318,33 @@ export function allocateSeating(
     }
   }
 
+  // Grow rooms[]/roomSlots[]/usedA/usedB if any reservation extends past
+  // the initially calculated roomsNeeded. We prioritize correct grouping
+  // over minimizing room count — empty rooms in between are acceptable.
+  let maxRoomIdx = -1;
+  for (const r of reservations) {
+    maxRoomIdx = Math.max(maxRoomIdx, r.startRoom + r.roomCount - 1);
+  }
+  while (rooms.length <= maxRoomIdx) {
+    const i = rooms.length;
+    const grid: (StudentRecord | null)[][] = Array.from(
+      { length: rows },
+      () => Array(totalCols).fill(null)
+    );
+    rooms.push({
+      roomNumber: normalStartingRoomNumber + i,
+      students: [],
+      grid,
+      totalRows: rows,
+      seatsPerRow: totalCols,
+      mainColumns,
+      seatsPerColumn,
+    });
+    roomSlots.push(buildRoomSlots(rows, mainColumns, seatsPerColumn));
+    usedA.push(0);
+    usedB.push(0);
+  }
+
   // ============================================================
   // Now fill each reservation linearly, department-by-department
   // in strict size order. The student queue for the code is a
