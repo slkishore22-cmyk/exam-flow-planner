@@ -448,68 +448,6 @@ export function allocateSeating(
     }
   }
 
-  // ============================================================
-  // COMPACTION PASS: For each exam code, no earlier room should
-  // have empty seats while a later room of the SAME code still
-  // has students. Pull students from the last room of each code
-  // forward into any empty seats of earlier rooms (same group),
-  // so the only partial room is the very last room of that code.
-  // ============================================================
-  const generalOffset = generalRooms.length;
-  for (const code of sortedCodes) {
-    // Find all rooms (by index in `rooms`, i.e. normal rooms) holding this code, per group
-    for (const group of ['A', 'B'] as const) {
-      const codeRoomIdxs: number[] = [];
-      for (let ri = 0; ri < rooms.length; ri++) {
-        const slots = roomSlots[ri][group];
-        const hasCodeInGroup = slots.some(({ row, col }) => {
-          const s = rooms[ri].grid[row][col];
-          return s && s.examCode === code.examCode;
-        });
-        if (hasCodeInGroup) codeRoomIdxs.push(ri);
-      }
-      if (codeRoomIdxs.length < 2) continue;
-
-      // Walk earlier rooms; for each empty slot in this group, pull
-      // a student from the LAST room (in this group, last seat first).
-      for (let i = 0; i < codeRoomIdxs.length - 1; i++) {
-        const earlierIdx = codeRoomIdxs[i];
-        const earlierSlots = roomSlots[earlierIdx][group];
-        for (const { row, col } of earlierSlots) {
-          if (rooms[earlierIdx].grid[row][col] !== null) continue;
-
-          // Find a donor from the LAST room (last codeRoomIdx) - take from the END
-          const lastIdx = codeRoomIdxs[codeRoomIdxs.length - 1];
-          const lastSlots = roomSlots[lastIdx][group];
-          let donorPos: { row: number; col: number } | null = null;
-          for (let k = lastSlots.length - 1; k >= 0; k--) {
-            const { row: lr, col: lc } = lastSlots[k];
-            const cand = rooms[lastIdx].grid[lr][lc];
-            if (cand && cand.examCode === code.examCode) {
-              donorPos = { row: lr, col: lc };
-              break;
-            }
-          }
-          if (!donorPos) break; // no more donors anywhere — done with this group
-
-          rooms[earlierIdx].grid[row][col] = rooms[lastIdx].grid[donorPos.row][donorPos.col];
-          rooms[lastIdx].grid[donorPos.row][donorPos.col] = null;
-        }
-      }
-    }
-  }
-
-  // Rebuild `students` arrays for any normal rooms that may have changed
-  for (const room of rooms) {
-    const newStudents: StudentRecord[] = [];
-    for (const row of room.grid) {
-      for (const cell of row) {
-        if (cell) newStudents.push(cell);
-      }
-    }
-    room.students = newStudents;
-  }
-
   return {
     rooms: allRooms,
     patternDecision: { pattern: 'CRISS_CROSS', message: null, violations: 0 },
