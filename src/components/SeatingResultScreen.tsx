@@ -400,26 +400,26 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         </div>
       </div>
 
-      {/* Print button */}
-      <div className="no-print mt-8 text-center">
-        <Button onClick={handlePrint} className="px-12 h-12 text-base rounded-xl">
+      {/* Print buttons */}
+      <div className="no-print mt-8 flex gap-3 justify-center">
+        <Button onClick={() => triggerPrint('single')} variant="outline" className="px-8 h-12 text-base rounded-xl">
+          Print This Room
+        </Button>
+        <Button onClick={() => triggerPrint('all')} className="px-12 h-12 text-base rounded-xl">
           Print All Rooms
         </Button>
       </div>
 
-      {/* Print-only: all rooms */}
-      <div ref={printRef} className="hidden print:block">
-        {rooms.map((room, i) => (
-          <div key={i} className={i < rooms.length - 1 ? 'print-page-break' : ''}>
-            <h2 className="text-xl font-bold text-center mb-4 mt-4">
-              Room {room.roomNumber} — {room.students.length} students
-              {roomViolations[i].count > 0 && (
-                <span style={{ color: '#EF4444' }}> — {roomViolations[i].count} violations</span>
-              )}
-            </h2>
-            {renderRoomGrid(room, i, true)}
-          </div>
-        ))}
+      {/* Print-only layout */}
+      <div ref={printRef} className="hidden print:block print-root">
+        {(printMode === 'single' ? [rooms[activeRoom]] : rooms).map((room, i, arr) => {
+          const isLast = i === arr.length - 1;
+          return (
+            <div key={room.roomNumber} className={!isLast ? 'page-break' : ''}>
+              <PrintRoomLayout room={room} config={config} deptShapeMap={deptShapeMap} />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
