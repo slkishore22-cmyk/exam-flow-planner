@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor, getGroupLabel } from '@/lib/seating-utils';
+import PrintRoomLayout, { getDeptShape } from './PrintRoomLayout';
 
 interface SeatingResultScreenProps {
   rooms: RoomAllocation[];
@@ -12,6 +13,7 @@ interface SeatingResultScreenProps {
 const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config, patternDecision, onBack }) => {
   const [activeRoom, setActiveRoom] = useState(0);
   const [visibleExamCodes, setVisibleExamCodes] = useState<Set<string>>(new Set());
+  const [printMode, setPrintMode] = useState<'all' | 'single' | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -98,11 +100,35 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     });
   }, [rooms]);
 
+  // Global department-shape map: examCodes sorted alphabetically across ALL rooms
+  const deptShapeMap = useMemo(() => {
+    const codes = new Set<string>();
+    rooms.forEach(r => r.students.forEach(s => codes.add(s.examCode)));
+    const sorted = Array.from(codes).sort((a, b) => a.localeCompare(b));
+    const map: Record<string, string> = {};
+    sorted.forEach((code, i) => { map[code] = getDeptShape(i); });
+    return map;
+  }, [rooms]);
+
+  // Toggle a body class so we can scope print CSS to single vs all
+  useEffect(() => {
+    if (printMode === 'single') document.body.classList.add('print-single');
+    else document.body.classList.remove('print-single');
+    return () => document.body.classList.remove('print-single');
+  }, [printMode]);
+
   if (!rooms || rooms.length === 0) {
     return <div className="text-center py-20 text-muted-foreground">No rooms to display.</div>;
   }
 
-  const handlePrint = () => window.print();
+  const triggerPrint = (mode: 'all' | 'single') => {
+    setPrintMode(mode);
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => setPrintMode(null), 200);
+    }, 50);
+  };
+
   const totalViolations = roomViolations.reduce((sum, v) => sum + v.count, 0);
 
   // Determine seat type label based on position
@@ -374,26 +400,26 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         </div>
       </div>
 
-      {/* Print button */}
-      <div className="no-print mt-8 text-center">
-        <Button onClick={handlePrint} className="px-12 h-12 text-base rounded-xl">
+      {/* Print buttons */}
+      <div className="no-print mt-8 flex gap-3 justify-center">
+        <Button onClick={() => triggerPrint('single')} variant="outline" className="px-8 h-12 text-base rounded-xl">
+          Print This Room
+        </Button>
+        <Button onClick={() => triggerPrint('all')} className="px-12 h-12 text-base rounded-xl">
           Print All Rooms
         </Button>
       </div>
 
-      {/* Print-only: all rooms */}
-      <div ref={printRef} className="hidden print:block">
-        {rooms.map((room, i) => (
-          <div key={i} className={i < rooms.length - 1 ? 'print-page-break' : ''}>
-            <h2 className="text-xl font-bold text-center mb-4 mt-4">
-              Room {room.roomNumber} — {room.students.length} students
-              {roomViolations[i].count > 0 && (
-                <span style={{ color: '#EF4444' }}> — {roomViolations[i].count} violations</span>
-              )}
-            </h2>
-            {renderRoomGrid(room, i, true)}
-          </div>
-        ))}
+      {/* Print-only layout */}
+      <div ref={printRef} className="hidden print:block print-root">
+        {(printMode === 'single' ? [rooms[activeRoom]] : rooms).map((room, i, arr) => {
+          const isLast = i === arr.length - 1;
+          return (
+            <div key={room.roomNumber} className={!isLast ? 'page-break' : ''}>
+              <PrintRoomLayout room={room} config={config} deptShapeMap={deptShapeMap} />
+            </div>
+          );
+        })}
       </div>
     </div>
   );

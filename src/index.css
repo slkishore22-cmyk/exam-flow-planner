@@ -66,11 +66,208 @@
 }
 
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+
+  * {
+    color: #000 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  html, body {
+    font-family: Arial, Helvetica, sans-serif !important;
+  }
+
   .no-print {
     display: none !important;
   }
+
+  .page-break {
+    page-break-after: always;
+  }
   .print-page-break {
     page-break-after: always;
+  }
+
+  .print-root {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    color: #000;
+  }
+
+  .print-room {
+    page-break-inside: avoid;
+  }
+
+  /* Header */
+  .print-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  .print-header-left .print-college {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .print-header-left .print-subtitle {
+    font-size: 14px;
+    margin-top: 2px;
+  }
+  .print-header-right {
+    text-align: right;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .print-hr {
+    border: none;
+    border-top: 1.5px solid #000 !important;
+    margin: 6px 0 8px;
+  }
+  .print-hr-thin {
+    border: none;
+    border-top: 1px solid #000 !important;
+    margin: 8px 0;
+  }
+
+  /* Summary bar */
+  .print-summary-bar {
+    border-bottom: 1px solid #ccc !important;
+    padding: 6px 0;
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  .print-summary-item {
+    margin-right: 14px;
+    white-space: nowrap;
+  }
+  .print-shape {
+    font-weight: 700;
+    margin-right: 2px;
+  }
+
+  /* Seat table */
+  .print-seat-table {
+    border-collapse: collapse;
+    margin: 0 auto 12px;
+  }
+  .print-col-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 4px 2px;
+    font-weight: 700;
+    border-bottom: 1px solid #000 !important;
+  }
+  .print-col-divider {
+    border-left: 1.5px solid #000 !important;
+    width: 8px;
+  }
+  .print-row-label {
+    font-size: 10px;
+    color: #555 !important;
+    padding-right: 6px;
+    text-align: right;
+    font-weight: 600;
+  }
+  .print-seat-cell {
+    padding: 2px;
+  }
+  .print-seat-card {
+    width: 70px;
+    height: 36px;
+    border: 1px solid #000 !important;
+    border-radius: 0;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .print-seat-empty {
+    border-style: dashed !important;
+  }
+  .print-seat-shape {
+    position: absolute;
+    top: 1px;
+    right: 3px;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .print-seat-roll {
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .print-checkbox-cell {
+    padding: 2px 6px 2px 2px;
+  }
+  .print-checkbox {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1px solid #000 !important;
+    vertical-align: middle;
+  }
+
+  /* Attendance summary */
+  .print-attendance-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 12px;
+    font-size: 11px;
+  }
+  .print-attendance-table th,
+  .print-attendance-table td {
+    border: 1px solid #000 !important;
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .print-attendance-table th {
+    font-weight: 700;
+  }
+  .print-num {
+    text-align: center !important;
+  }
+  .print-blank-cell {
+    min-width: 70px;
+    height: 22px;
+  }
+  .print-total-row td {
+    font-weight: 700;
+  }
+
+  /* Sign-off */
+  .print-signoff {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: 16px;
+    gap: 20px;
+    font-size: 11px;
+    line-height: 1.8;
+  }
+  .print-signoff-right {
+    text-align: right;
+  }
+  .print-signature-box {
+    width: 150px;
+    height: 60px;
+    border: 1px solid #000 !important;
+    margin-top: 4px;
+    margin-left: auto;
+  }
+  .print-remarks {
+    font-size: 11px;
+    line-height: 2;
   }
 }
 
