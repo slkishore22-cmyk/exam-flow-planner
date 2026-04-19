@@ -104,7 +104,24 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     return <div className="text-center py-20 text-muted-foreground">No rooms to display.</div>;
   }
 
-  const handlePrint = () => window.print();
+  // Global department-shape map: examCodes sorted alphabetically across ALL rooms
+  const deptShapeMap = useMemo(() => {
+    const codes = new Set<string>();
+    rooms.forEach(r => r.students.forEach(s => codes.add(s.examCode)));
+    const sorted = Array.from(codes).sort((a, b) => a.localeCompare(b));
+    const map: Record<string, string> = {};
+    sorted.forEach((code, i) => { map[code] = getDeptShape(i); });
+    return map;
+  }, [rooms]);
+
+  const triggerPrint = (mode: 'all' | 'single') => {
+    setPrintMode(mode);
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => setPrintMode(null), 100);
+    }, 50);
+  };
+
   const totalViolations = roomViolations.reduce((sum, v) => sum + v.count, 0);
 
   // Determine seat type label based on position
