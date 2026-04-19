@@ -276,13 +276,13 @@ export function allocateSeating(
 
     const totalStudents = code.totalCount;
 
-    // How many rooms are still available in primary group?
-    const primaryAvailable = roomsNeeded - (primary === 'A' ? nextRoomA : nextRoomB);
-    const primaryCapacity = primaryAvailable * primarySize;
-
-    let primaryStudents = Math.min(totalStudents, primaryCapacity);
+    // Each group operates independently. A code stays in its primary group
+    // as long as it needs rooms — we'll grow the room array if necessary.
+    // Only spill to secondary if primary literally cannot fit (it always can
+    // since we can grow), so in practice spill never happens here.
+    let primaryStudents = totalStudents;
     let primaryRooms = Math.ceil(primaryStudents / primarySize);
-    let remaining = totalStudents - primaryStudents;
+    let remaining = 0;
 
     if (primaryRooms > 0) {
       const startRoom = primary === 'A' ? nextRoomA : nextRoomB;
@@ -316,6 +316,33 @@ export function allocateSeating(
         else nextRoomB += secondaryRooms;
       }
     }
+  }
+
+  // Grow rooms[]/roomSlots[]/usedA/usedB if any reservation extends past
+  // the initially calculated roomsNeeded. We prioritize correct grouping
+  // over minimizing room count — empty rooms in between are acceptable.
+  let maxRoomIdx = -1;
+  for (const r of reservations) {
+    maxRoomIdx = Math.max(maxRoomIdx, r.startRoom + r.roomCount - 1);
+  }
+  while (rooms.length <= maxRoomIdx) {
+    const i = rooms.length;
+    const grid: (StudentRecord | null)[][] = Array.from(
+      { length: rows },
+      () => Array(totalCols).fill(null)
+    );
+    rooms.push({
+      roomNumber: normalStartingRoomNumber + i,
+      students: [],
+      grid,
+      totalRows: rows,
+      seatsPerRow: totalCols,
+      mainColumns,
+      seatsPerColumn,
+    });
+    roomSlots.push(buildRoomSlots(rows, mainColumns, seatsPerColumn));
+    usedA.push(0);
+    usedB.push(0);
   }
 
   // ============================================================
