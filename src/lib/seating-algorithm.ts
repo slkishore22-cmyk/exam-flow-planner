@@ -1072,12 +1072,16 @@ export function allocateSeating(
   for (let ri = 0; ri < allRooms.length; ri++) {
     const room = allRooms[ri];
     const subCols = room.seatsPerColumn ?? seatsPerColumn;
-    // Collect occupied seats grouped by (group, examCode, department),
-    // preserving fill order (row-major).
+    // Collect occupied seats grouped by (group, examCode, department).
+    // Iterate ROW-MAJOR (row outer, col inner) so the seat sequence reads
+    // HORIZONTALLY across the chart: row 0 left-to-right, then row 1, etc.
+    // Roll numbers will then flow horizontally within each contiguous block.
     type Seat = { row: number; col: number };
     const buckets = new Map<string, { seats: Seat[]; students: StudentRecord[] }>();
-    for (let r = 0; r < room.grid.length; r++) {
-      for (let c = 0; c < room.grid[r].length; c++) {
+    const totalRows = room.grid.length;
+    const totalCols = room.grid[0]?.length || 0;
+    for (let r = 0; r < totalRows; r++) {
+      for (let c = 0; c < totalCols; c++) {
         const s = room.grid[r][c];
         if (!s) continue;
         const g = room.isGeneral
