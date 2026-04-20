@@ -541,6 +541,208 @@ export function allocateSeating(
     }
   }
 
+  // ============================================================
+  // ===== SLACK-FILLER PHASE (A/B leftover seats) =====
+  // Fills empty A/B seats in already-built rooms using leftover
+  // small codes (codes NOT placed by the big-code phase above).
+  // Walk order: room 1 → N, Group A then Group B per room.
+  // Strategy per (room, group) with empty seats:
+  //   1. Exact single-code match (count == empty)
+  //   2. Largest single-code under-fill, then loop
+  //   3. Two-code combination (exact, else largest pair ≤ slack)
+  //   4. Three-code combination (rare fallback)
+  // Departments inside a code stay contiguous (largest dept first).
+  // Does NOT touch any seat already filled by the big-code phase.
+  // ============================================================
+  {
+    // Collect leftover codes = all normal-student exam codes NOT yet placed.
+    const placedRolls = new Set<string>();
+    for (const room of rooms) {
+      for (const s of room.students) placedRolls.add(s.rollNumber);
+    }
+
+    type LeftoverCode = {
+      examCode: string;
+      students: StudentRecord[]; // ordered: largest dept first, contiguous
+      count: number;
+    };
+
+    const leftoverByCode = new Map<string, StudentRecord[]>();
+    for (const s of normalStudents) {
+      if (placedRolls.has(s.rollNumber)) continue;
+      if (!leftoverByCode.has(s.examCode)) leftoverByCode.set(s.examCode, []);
+      leftoverByCode.get(s.examCode)!.push(s);
+    }
+
+    const leftovers: LeftoverCode[] = Array.from(leftoverByCode.entries()).map(
+      ([examCode, list]) => {
+        // Group by dept, sort depts by size desc, then flatten with roll sort
+        const deptMap = new Map<string, StudentRecord[]>();
+        for (const s of list) {
+          const k = normalizeDepartmentKey(s.department);
+          if (!deptMap.has(k)) deptMap.set(k, []);
+          deptMap.get(k)!.push(s);
+        }
+        const orderedDepts = Array.from(deptMap.values()).sort(
+          (a, b) => b.length - a.length
+        );
+        const ordered: StudentRecord[] = [];
+        for (const bucket of orderedDepts) {
+          const sorted = [...bucket].sort((a, b) => {
+            const aN = parseInt(a.rollNumber.replace(/\D/g, ''), 10);
+            const bN = parseInt(b.rollNumber.replace(/\D/g, ''), 10);
+            if (!isNaN(aN) && !isNaN(bN) && aN !== bN) return aN - bN;
+            return a.rollNumber.localeCompare(b.rollNumber);
+          });
+          for (const s of sorted) ordered.push(s);
+        }
+        return { examCode, students: ordered, count: ordered.length };
+      }
+    );
+
+    // Pool of available leftover codes (mutated as we consume)
+    const pool: LeftoverCode[] = [...leftovers];
+
+    const removeFromPool = (codes: LeftoverCode[]) => {
+      for (const c of codes) {
+        const idx = pool.indexOf(c);
+        if (idx >= 0) pool.splice(idx, 1);
+      }
+    };
+
+    // Try to find a combination of pool entries summing exactly to `target`.
+    // Returns the selected codes or null. Tries 1, then 2, then 3 codes.
+    const findExactCombo = (target: number, maxSize = 3): LeftoverCode[] | null => {
+      // size 1
+      for (const c of pool) if (c.count === target) return [c];
+      if (maxSize < 2) return null;
+      // size 2
+      const sorted = [...pool].sort((a, b) => b.count - a.count);
+      for (let i = 0; i < sorted.length; i++) {
+        for (let j = i + 1; j < sorted.length; j++) {
+          if (sorted[i].count + sorted[j].count === target) {
+            return [sorted[i], sorted[j]];
+          }
+        }
+      }
+      if (maxSize < 3) return null;
+      // size 3
+      for (let i = 0; i < sorted.length; i++) {
+        for (let j = i + 1; j < sorted.length; j++) {
+          for (let k = j + 1; k < sorted.length; k++) {
+            if (sorted[i].count + sorted[j].count + sorted[k].count === target) {
+              return [sorted[i], sorted[j], sorted[k]];
+            }
+          }
+        }
+      }
+      return null;
+    };
+
+    // Largest single code with count <= target (for under-fill loop)
+    const findLargestUnder = (target: number): LeftoverCode | null => {
+      let best: LeftoverCode | null = null;
+      for (const c of pool) {
+        if (c.count <= target && (!best || c.count > best.count)) best = c;
+      }
+      return best;
+    };
+
+    // Largest pair sum <= target
+    const findLargestPairUnder = (target: number): LeftoverCode[] | null => {
+      const sorted = [...pool].sort((a, b) => b.count - a.count);
+      let best: LeftoverCode[] | null = null;
+      let bestSum = 0;
+      for (let i = 0; i < sorted.length; i++) {
+        for (let j = i + 1; j < sorted.length; j++) {
+          const sum = sorted[i].count + sorted[j].count;
+          if (sum <= target && sum > bestSum) {
+            bestSum = sum;
+            best = [sorted[i], sorted[j]];
+          }
+        }
+      }
+      return best;
+    };
+
+    // Place a list of codes (in order) into a (room, group)'s empty slots.
+    const placeIntoSlot = (
+      roomIdx: number,
+      group: 'A' | 'B',
+      codes: LeftoverCode[]
+    ) => {
+      const slotList = roomSlots[roomIdx][group];
+      const usedArr = group === 'A' ? usedA : usedB;
+      const groupSize = slotList.length;
+      const queue: StudentRecord[] = [];
+      for (const c of codes) for (const s of c.students) queue.push(s);
+      let qIdx = 0;
+      while (usedArr[roomIdx] < groupSize && qIdx < queue.length) {
+        const pos = slotList[usedArr[roomIdx]];
+        rooms[roomIdx].grid[pos.row][pos.col] = queue[qIdx];
+        rooms[roomIdx].students.push(queue[qIdx]);
+        usedArr[roomIdx]++;
+        qIdx++;
+      }
+      removeFromPool(codes);
+    };
+
+    // Walk rooms in order, group A then B
+    for (let ri = 0; ri < rooms.length; ri++) {
+      for (const group of ['A', 'B'] as const) {
+        const slotList = roomSlots[ri][group];
+        const usedArr = group === 'A' ? usedA : usedB;
+        const groupSize = slotList.length;
+
+        // Loop until this group is full or we can't place anything more
+        let safetyGuard = 0;
+        while (usedArr[ri] < groupSize && safetyGuard++ < 50) {
+          const empty = groupSize - usedArr[ri];
+          if (pool.length === 0) break;
+
+          // 1. Exact single
+          const singleExact = pool.find((c) => c.count === empty);
+          if (singleExact) {
+            placeIntoSlot(ri, group, [singleExact]);
+            continue;
+          }
+
+          // 2. Try exact 2-code combo
+          const combo2 = findExactCombo(empty, 2);
+          if (combo2) {
+            placeIntoSlot(ri, group, combo2);
+            continue;
+          }
+
+          // 3. Try exact 3-code combo
+          const combo3 = findExactCombo(empty, 3);
+          if (combo3) {
+            placeIntoSlot(ri, group, combo3);
+            continue;
+          }
+
+          // 4. Largest single under-fill
+          const largestSingle = findLargestUnder(empty);
+          if (largestSingle) {
+            placeIntoSlot(ri, group, [largestSingle]);
+            continue;
+          }
+
+          // 5. Largest pair under-fill
+          const largestPair = findLargestPairUnder(empty);
+          if (largestPair) {
+            placeIntoSlot(ri, group, largestPair);
+            continue;
+          }
+
+          // Nothing fits — leave remaining slack for C/D phase
+          break;
+        }
+      }
+    }
+  }
+  // ===== END SLACK-FILLER PHASE =====
+
   return {
     rooms: allRooms,
     patternDecision: { pattern: 'CRISS_CROSS', message: null, violations: 0 },
