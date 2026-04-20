@@ -6,6 +6,7 @@ Minimal Apple-like UI: white bg, black text, gold accent, Inter font.
 Calculation: `Math.ceil(totalStudents / roomStrength)`. Default 45 seats (5x9 grid).
 Pattern: 5x9 grid. Odd rows A|C|B, Even rows B|D|A.
 A/B fill is universal two-phase: Phase 0 oversize spillover (15-chunks into empty groups), Phase 1 small-gap filler (≤15 only, never split, never mid-start).
+C/D fill runs after A/B: largest leftover code first, alternates C(6)/D(9) across successive rooms (15 per pair), uses whichever of C/D is empty in each room, tail best-fits into smallest empty C/D ≥ remaining.
 
 ## Seating Logic
 Department-Block Allocator. Major codes (>= 100) fill A/B (15 seats each). Each code starts in a fresh room.
@@ -14,6 +15,7 @@ Minor codes (< 100) fill C/D (9 and 6 seats).
 
 ## Memories
 - [A/B Fill Strategy](mem://logic/ab-fill-strategy) — Universal two-phase rule: oversize spillover then small-gap filler
+- [C/D Fill Strategy](mem://logic/cd-fill-strategy) — Middle-order alternating C(6)/D(9) per room, tail best-fit
 - [Design Principles](mem://style/design-principles) — Minimalist Apple-inspired UI, 4-step workflow, gold accent
 - [Color Palette](mem://style/color-palette) — Group background colors (A/B/C/D), distinct bold colors for exam codes in print
 - [Tech Stack & Architecture](mem://technical/implementation-constraints) — React Vite (non-SWC), Supabase, centralized parent state
