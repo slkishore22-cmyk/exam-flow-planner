@@ -4,6 +4,7 @@ import UploadScreen from '@/components/UploadScreen';
 import VerificationScreen from '@/components/VerificationScreen';
 import RoomConfigScreen from '@/components/RoomConfigScreen';
 import SeatingResultScreen from '@/components/SeatingResultScreen';
+import vincLogo from '@/assets/vinc-logo.jpg';
 import {
   PdfExtractionResult,
   StudentRecord,

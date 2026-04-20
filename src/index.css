@@ -24,20 +24,25 @@
     --muted: 0 0% 96%;
     --muted-foreground: 0 0% 45%;
 
-    --accent: 43 56% 52%;
-    --accent-foreground: 0 0% 7%;
+    --accent: 200 85% 45%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 0 0% 90%;
     --input: 0 0% 90%;
-    --ring: 43 56% 52%;
+    --ring: 210 90% 40%;
 
     --radius: 0.75rem;
 
-    --gold: 43 56% 52%;
-    --gold-light: 43 56% 92%;
+    /* VIN-C brand: cyan -> deep blue gradient. Tokens kept named "gold" for backward compat. */
+    --brand-cyan: 190 80% 50%;
+    --brand-blue: 215 90% 35%;
+    --brand-deep: 220 95% 25%;
+    --gold: 210 90% 40%;
+    --gold-light: 200 85% 92%;
+    --brand-gradient: linear-gradient(135deg, hsl(var(--brand-cyan)), hsl(var(--brand-blue)) 60%, hsl(var(--brand-deep)));
     --amber-warning: 38 92% 50%;
     --amber-warning-light: 38 92% 95%;
   }
@@ -55,13 +60,20 @@
 
 @layer utilities {
   .gold-text {
-    color: hsl(var(--gold));
+    background: var(--brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
   .gold-bg {
-    background-color: hsl(var(--gold));
+    background: var(--brand-gradient);
+    color: hsl(0 0% 100%);
   }
   .gold-bg-light {
     background-color: hsl(var(--gold-light));
+  }
+  .brand-gradient {
+    background: var(--brand-gradient);
   }
 }
 
