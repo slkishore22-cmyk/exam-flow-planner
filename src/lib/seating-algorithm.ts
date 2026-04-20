@@ -938,22 +938,35 @@ export function allocateSeating(
             // Flip preference for next room
             preferNext = useGroup === 'C' ? 'D' : 'C';
           } else {
-            // TAIL: remaining < capacity. Try to find the BEST-fit empty
-            // C or D group across all rooms (smallest group ≥ remaining).
+            // TAIL: remaining < capacity. Stay SEQUENTIAL.
+            // First try this room's chosen empty group. If it fits, place here.
+            if (remaining.length <= capacity) {
+              placeIntoCDGroup(ri, useGroup, remaining);
+              remaining = [];
+              placedAny = true;
+              break;
+            }
+
+            // Otherwise, look FORWARD ONLY for the next completely empty C/D group
+            // that can hold the tail. Never jump backward into earlier rooms.
             type Cand = { ri: number; group: 'C' | 'D'; size: number };
             const cands: Cand[] = [];
-            for (let rj = 0; rj < rooms.length; rj++) {
+            for (let rj = ri + 1; rj < rooms.length; rj++) {
               if (isGroupEmpty(rj, 'C')) cands.push({ ri: rj, group: 'C', size: groupSizeOf(rj, 'C') });
               if (isGroupEmpty(rj, 'D')) cands.push({ ri: rj, group: 'D', size: groupSizeOf(rj, 'D') });
             }
-            const fits = cands.filter((c) => c.size >= remaining.length);
-            // Prefer exact match, else smallest group that fits, else largest available
-            fits.sort((a, b) => a.size - b.size);
-            const target = fits[0] ?? cands.sort((a, b) => b.size - a.size)[0];
-            if (!target) break;
-            placeIntoCDGroup(target.ri, target.group, remaining);
-            remaining = [];
-            placedAny = true;
+            const fits = cands
+              .filter((c) => c.size >= remaining.length)
+              .sort((a, b) => a.ri - b.ri || a.size - b.size);
+            const target = fits[0];
+            if (target) {
+              placeIntoCDGroup(target.ri, target.group, remaining);
+              remaining = [];
+              placedAny = true;
+              break;
+            }
+
+            // No forward slot exists: leave the remainder for the final fresh-room pass.
             break;
           }
         }
@@ -965,7 +978,7 @@ export function allocateSeating(
         // If something remains and no progress, stop
         if (remaining.length > 0 && !placedAny) break;
         // If something remains, push it back as a smaller code so the next
-        // iteration can try to place it as a tail.
+        // iteration can try to place it in a later fresh room/group.
         if (remaining.length > 0) {
           pool.push({
             examCode: code.examCode,
@@ -980,40 +993,15 @@ export function allocateSeating(
     // ================================================================
     // PHASE 3 — SAFETY PASS: GUARANTEE ZERO STUDENT LOSS
     // ----------------------------------------------------------------
-    // Any students still in the pool after Phases 0/1/2 (because no
-    // empty A/B/C/D slot of the right size was found) MUST still be
-    // seated. We fill remaining empty slots in existing rooms first
-    // (any group, any seat), then GROW new rooms as needed. Codes
-    // and departments stay grouped together as best as possible.
+    // IMPORTANT: do NOT backfill arbitrary empty cells in earlier rooms.
+    // That breaks the fresh-room logic and creates false violation-heavy rooms.
+    // Instead, place any remaining students only into NEW rooms appended at end.
     // ================================================================
     {
-      // Flatten pool into a single ordered student queue, keeping each
-      // code's students contiguous (largest code first; within code,
-      // largest dept first as already ordered in pool).
-      const remainingQueue: StudentRecord[] = [];
-      pool.sort((a, b) => b.count - a.count);
-      for (const c of pool) for (const s of c.students) remainingQueue.push(s);
+      const remainingByCode = [...pool].sort((a, b) => b.count - a.count);
       pool.length = 0;
 
-      let qIdx = 0;
-
-      // First, fill any empty seats in EXISTING rooms (any group, any cell).
-      // Walk row-major within each room.
-      for (let ri = 0; ri < rooms.length && qIdx < remainingQueue.length; ri++) {
-        const room = rooms[ri];
-        for (let r = 0; r < room.grid.length && qIdx < remainingQueue.length; r++) {
-          for (let c = 0; c < room.grid[r].length && qIdx < remainingQueue.length; c++) {
-            if (room.grid[r][c] === null) {
-              room.grid[r][c] = remainingQueue[qIdx];
-              room.students.push(remainingQueue[qIdx]);
-              qIdx++;
-            }
-          }
-        }
-      }
-
-      // Then, GROW new rooms until every remaining student has a seat.
-      while (qIdx < remainingQueue.length) {
+      const createEmptyRoom = (): RoomAllocation => {
         const i = rooms.length;
         const grid: (StudentRecord | null)[][] = Array.from(
           { length: rows },
@@ -1032,19 +1020,32 @@ export function allocateSeating(
         roomSlots.push(buildRoomSlots(rows, mainColumns, seatsPerColumn));
         usedA.push(0);
         usedB.push(0);
-        // Also update allRooms reference so it includes the new room
         allRooms.push(newRoom);
+        return newRoom;
+      };
 
-        for (let r = 0; r < rows && qIdx < remainingQueue.length; r++) {
-          for (let c = 0; c < totalCols && qIdx < remainingQueue.length; c++) {
-            grid[r][c] = remainingQueue[qIdx];
-            newRoom.students.push(remainingQueue[qIdx]);
+      const placeFreshRoomSequential = (room: RoomAllocation, queue: StudentRecord[]) => {
+        let qIdx = 0;
+        for (let r = 0; r < room.grid.length && qIdx < queue.length; r++) {
+          for (let c = 0; c < room.grid[r].length && qIdx < queue.length; c++) {
+            room.grid[r][c] = queue[qIdx];
+            room.students.push(queue[qIdx]);
             qIdx++;
           }
         }
+        return qIdx;
+      };
+
+      for (const code of remainingByCode) {
+        let remaining = [...code.students];
+        while (remaining.length > 0) {
+          const room = createEmptyRoom();
+          const consumed = placeFreshRoomSequential(room, remaining);
+          remaining = remaining.slice(consumed);
+        }
       }
     }
-    // ===== END PHASE 3 (safety pass) =====
+    // ===== END PHASE 3 (fresh-room safety pass) =====
   }
   // ===== END SLACK-FILLER PHASE =====
 
