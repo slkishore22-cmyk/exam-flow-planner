@@ -754,21 +754,17 @@ export function allocateSeating(
         const idx = pool.indexOf(oversize);
         if (idx >= 0) pool.splice(idx, 1);
 
-        // If some students remain unplaced (no more empty groups), put
-        // them back into the pool as a smaller (potentially still
-        // oversize) code so they can be retried or fall to C/D later.
+        // If some students remain unplaced (no more empty A/B groups),
+        // put them back into the pool as a smaller code so the C/D phase
+        // (or final safety pass) can place them. CRITICAL: never drop
+        // students — even oversize remainders must be re-pooled.
         if (remaining.length > 0) {
-          // Stop trying to place this code further — no empty groups left.
-          // Re-insert ONLY if the remainder fits the eligibility rules
-          // (count <= 15) so the small-gap filler below can still use it.
-          if (remaining.length <= 15) {
-            pool.push({
-              examCode: oversize.examCode,
-              students: remaining,
-              count: remaining.length,
-            });
-          }
-          // If still > 15 and no empty groups remain, leave it for C/D.
+          pool.push({
+            examCode: oversize.examCode,
+            students: remaining,
+            count: remaining.length,
+          });
+          // Stop trying to place THIS code further — no empty A/B groups left.
           break;
         }
       }
@@ -980,8 +976,90 @@ export function allocateSeating(
       }
     }
     // ===== END PHASE 2 (C/D fill) =====
+
+    // ================================================================
+    // PHASE 3 — SAFETY PASS: GUARANTEE ZERO STUDENT LOSS
+    // ----------------------------------------------------------------
+    // Any students still in the pool after Phases 0/1/2 (because no
+    // empty A/B/C/D slot of the right size was found) MUST still be
+    // seated. We fill remaining empty slots in existing rooms first
+    // (any group, any seat), then GROW new rooms as needed. Codes
+    // and departments stay grouped together as best as possible.
+    // ================================================================
+    {
+      // Flatten pool into a single ordered student queue, keeping each
+      // code's students contiguous (largest code first; within code,
+      // largest dept first as already ordered in pool).
+      const remainingQueue: StudentRecord[] = [];
+      pool.sort((a, b) => b.count - a.count);
+      for (const c of pool) for (const s of c.students) remainingQueue.push(s);
+      pool.length = 0;
+
+      let qIdx = 0;
+
+      // First, fill any empty seats in EXISTING rooms (any group, any cell).
+      // Walk row-major within each room.
+      for (let ri = 0; ri < rooms.length && qIdx < remainingQueue.length; ri++) {
+        const room = rooms[ri];
+        for (let r = 0; r < room.grid.length && qIdx < remainingQueue.length; r++) {
+          for (let c = 0; c < room.grid[r].length && qIdx < remainingQueue.length; c++) {
+            if (room.grid[r][c] === null) {
+              room.grid[r][c] = remainingQueue[qIdx];
+              room.students.push(remainingQueue[qIdx]);
+              qIdx++;
+            }
+          }
+        }
+      }
+
+      // Then, GROW new rooms until every remaining student has a seat.
+      while (qIdx < remainingQueue.length) {
+        const i = rooms.length;
+        const grid: (StudentRecord | null)[][] = Array.from(
+          { length: rows },
+          () => Array(totalCols).fill(null)
+        );
+        const newRoom: RoomAllocation = {
+          roomNumber: normalStartingRoomNumber + i,
+          students: [],
+          grid,
+          totalRows: rows,
+          seatsPerRow: totalCols,
+          mainColumns,
+          seatsPerColumn,
+        };
+        rooms.push(newRoom);
+        roomSlots.push(buildRoomSlots(rows, mainColumns, seatsPerColumn));
+        usedA.push(0);
+        usedB.push(0);
+        // Also update allRooms reference so it includes the new room
+        allRooms.push(newRoom);
+
+        for (let r = 0; r < rows && qIdx < remainingQueue.length; r++) {
+          for (let c = 0; c < totalCols && qIdx < remainingQueue.length; c++) {
+            grid[r][c] = remainingQueue[qIdx];
+            newRoom.students.push(remainingQueue[qIdx]);
+            qIdx++;
+          }
+        }
+      }
+    }
+    // ===== END PHASE 3 (safety pass) =====
   }
   // ===== END SLACK-FILLER PHASE =====
+
+  // FINAL VERIFICATION: warn (in console) if any student is missing.
+  const seatedCount = allRooms.reduce((sum, r) => {
+    let n = 0;
+    for (const row of r.grid) for (const cell of row) if (cell) n++;
+    return sum + n;
+  }, 0);
+  if (seatedCount !== students.length) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[seating-algorithm] Mismatch: ${students.length} input students vs ${seatedCount} seated. Diff = ${students.length - seatedCount}.`
+    );
+  }
 
   return {
     rooms: allRooms,
