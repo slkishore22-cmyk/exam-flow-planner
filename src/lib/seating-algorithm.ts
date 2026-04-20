@@ -754,21 +754,17 @@ export function allocateSeating(
         const idx = pool.indexOf(oversize);
         if (idx >= 0) pool.splice(idx, 1);
 
-        // If some students remain unplaced (no more empty groups), put
-        // them back into the pool as a smaller (potentially still
-        // oversize) code so they can be retried or fall to C/D later.
+        // If some students remain unplaced (no more empty A/B groups),
+        // put them back into the pool as a smaller code so the C/D phase
+        // (or final safety pass) can place them. CRITICAL: never drop
+        // students — even oversize remainders must be re-pooled.
         if (remaining.length > 0) {
-          // Stop trying to place this code further — no empty groups left.
-          // Re-insert ONLY if the remainder fits the eligibility rules
-          // (count <= 15) so the small-gap filler below can still use it.
-          if (remaining.length <= 15) {
-            pool.push({
-              examCode: oversize.examCode,
-              students: remaining,
-              count: remaining.length,
-            });
-          }
-          // If still > 15 and no empty groups remain, leave it for C/D.
+          pool.push({
+            examCode: oversize.examCode,
+            students: remaining,
+            count: remaining.length,
+          });
+          // Stop trying to place THIS code further — no empty A/B groups left.
           break;
         }
       }
