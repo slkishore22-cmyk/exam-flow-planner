@@ -697,6 +697,87 @@ export function allocateSeating(
       removeFromPool(codes);
     };
 
+    // ----------------------------------------------------------------
+    // PHASE 0 — OVERSIZE SPILLOVER:
+    // For codes with count > 15, slice them into chunks of up to
+    // `groupSize` (typically 15) and pour them into COMPLETELY EMPTY
+    // A or B groups across consecutive rooms. The code stays contiguous
+    // across rooms; the final chunk may be smaller than the group size.
+    // Walk order: room 1..N, Group A then B per room.
+    // Largest oversize codes are placed first.
+    // ----------------------------------------------------------------
+    {
+      const placeStudentsIntoEmptyGroup = (
+        roomIdx: number,
+        group: 'A' | 'B',
+        students: StudentRecord[]
+      ) => {
+        const slotList = roomSlots[roomIdx][group];
+        const usedArr = group === 'A' ? usedA : usedB;
+        let qIdx = 0;
+        while (usedArr[roomIdx] < slotList.length && qIdx < students.length) {
+          const pos = slotList[usedArr[roomIdx]];
+          rooms[roomIdx].grid[pos.row][pos.col] = students[qIdx];
+          rooms[roomIdx].students.push(students[qIdx]);
+          usedArr[roomIdx]++;
+          qIdx++;
+        }
+      };
+
+      // Repeatedly pick the largest oversize code in the pool and pour it
+      // into successive empty groups until exhausted.
+      let guard = 0;
+      while (guard++ < 200) {
+        const oversize = pool
+          .filter((c) => c.count > 15)
+          .sort((a, b) => b.count - a.count)[0];
+        if (!oversize) break;
+
+        let remaining = [...oversize.students];
+        // Walk rooms/groups looking for completely empty A or B groups
+        outer: for (let ri = 0; ri < rooms.length && remaining.length > 0; ri++) {
+          for (const group of ['A', 'B'] as const) {
+            const slotList = roomSlots[ri][group];
+            const usedArr = group === 'A' ? usedA : usedB;
+            if (usedArr[ri] !== 0) continue; // only completely empty groups
+            const chunkSize = Math.min(slotList.length, remaining.length);
+            const chunk = remaining.slice(0, chunkSize);
+            remaining = remaining.slice(chunkSize);
+            placeStudentsIntoEmptyGroup(ri, group, chunk);
+            if (remaining.length === 0) break outer;
+          }
+        }
+
+        // Remove this oversize code from the pool regardless of whether
+        // we placed all of it (any unplaced students will fall through
+        // to the C/D phase later). We must remove to avoid an infinite loop.
+        const idx = pool.indexOf(oversize);
+        if (idx >= 0) pool.splice(idx, 1);
+
+        // If some students remain unplaced (no more empty groups), put
+        // them back into the pool as a smaller (potentially still
+        // oversize) code so they can be retried or fall to C/D later.
+        if (remaining.length > 0) {
+          // Stop trying to place this code further — no empty groups left.
+          // Re-insert ONLY if the remainder fits the eligibility rules
+          // (count <= 15) so the small-gap filler below can still use it.
+          if (remaining.length <= 15) {
+            pool.push({
+              examCode: oversize.examCode,
+              students: remaining,
+              count: remaining.length,
+            });
+          }
+          // If still > 15 and no empty groups remain, leave it for C/D.
+          break;
+        }
+      }
+    }
+
+    // ----------------------------------------------------------------
+    // PHASE 1 — SMALL-GAP FILLER (existing logic):
+    // Fill remaining tail-end gaps using small codes (count <= 15) only.
+    // ----------------------------------------------------------------
     // Walk rooms in order, group A then B
     for (let ri = 0; ri < rooms.length; ri++) {
       for (const group of ['A', 'B'] as const) {
