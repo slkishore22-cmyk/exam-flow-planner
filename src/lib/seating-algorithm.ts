@@ -1072,18 +1072,16 @@ export function allocateSeating(
   for (let ri = 0; ri < allRooms.length; ri++) {
     const room = allRooms[ri];
     const subCols = room.seatsPerColumn ?? seatsPerColumn;
-    // Collect occupied seats grouped by (group, examCode, department),
-    // preserving HORIZONTAL fill order — iterate column-major so that
-    // within a single group's column the rolls go top-to-bottom first,
-    // then move to the next column of the same group. This makes each
-    // vertical column read sequentially (which the user calls "horizontal
-    // order" across the seating chart layout).
+    // Collect occupied seats grouped by (group, examCode, department).
+    // Iterate ROW-MAJOR (row outer, col inner) so the seat sequence reads
+    // HORIZONTALLY across the chart: row 0 left-to-right, then row 1, etc.
+    // Roll numbers will then flow horizontally within each contiguous block.
     type Seat = { row: number; col: number };
     const buckets = new Map<string, { seats: Seat[]; students: StudentRecord[] }>();
     const totalRows = room.grid.length;
     const totalCols = room.grid[0]?.length || 0;
-    for (let c = 0; c < totalCols; c++) {
-      for (let r = 0; r < totalRows; r++) {
+    for (let r = 0; r < totalRows; r++) {
+      for (let c = 0; c < totalCols; c++) {
         const s = room.grid[r][c];
         if (!s) continue;
         const g = room.isGeneral
