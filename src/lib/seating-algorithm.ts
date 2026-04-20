@@ -276,16 +276,20 @@ export function allocateSeating(
 
     const totalStudents = code.totalCount;
 
-    // Each group operates independently. A code stays in its primary group
-    // as long as it needs rooms — we'll grow the room array if necessary.
-    // Only spill to secondary if primary literally cannot fit (it always can
-    // since we can grow), so in practice spill never happens here.
-    let primaryStudents = totalStudents;
-    let primaryRooms = Math.ceil(primaryStudents / primarySize);
-    let remaining = 0;
+    // CRITICAL: never grow the room count during the initial A/B reservation.
+    // Reserve only inside the precomputed minimal room set. Any remainder is
+    // intentionally left unreserved so the later universal A/B spillover and
+    // C/D phases can use the already-existing empty groups instead of creating
+    // extra rooms and inflating the empty-seat count.
+    const primaryCursor = primary === 'A' ? nextRoomA : nextRoomB;
+    const primaryAvailableRooms = Math.max(0, roomsNeeded - primaryCursor);
+    const primaryRooms = Math.min(
+      Math.ceil(totalStudents / primarySize),
+      primaryAvailableRooms
+    );
 
     if (primaryRooms > 0) {
-      const startRoom = primary === 'A' ? nextRoomA : nextRoomB;
+      const startRoom = primaryCursor;
       reservations.push({
         code,
         group: primary,
@@ -295,26 +299,6 @@ export function allocateSeating(
       });
       if (primary === 'A') nextRoomA += primaryRooms;
       else nextRoomB += primaryRooms;
-    }
-
-    if (remaining > 0) {
-      const secondaryAvailable = roomsNeeded - (secondary === 'A' ? nextRoomA : nextRoomB);
-      const secondaryRooms = Math.min(
-        secondaryAvailable,
-        Math.ceil(remaining / secondarySize)
-      );
-      if (secondaryRooms > 0) {
-        const startRoom = secondary === 'A' ? nextRoomA : nextRoomB;
-        reservations.push({
-          code,
-          group: secondary,
-          startRoom,
-          roomCount: secondaryRooms,
-          seats: secondaryRooms * secondarySize,
-        });
-        if (secondary === 'A') nextRoomA += secondaryRooms;
-        else nextRoomB += secondaryRooms;
-      }
     }
   }
 
@@ -938,27 +922,19 @@ export function allocateSeating(
             // Flip preference for next room
             preferNext = useGroup === 'C' ? 'D' : 'C';
           } else {
-            // TAIL: remaining < capacity. Stay SEQUENTIAL.
-            // First try this room's chosen empty group. If it fits, place here.
-            if (remaining.length <= capacity) {
-              placeIntoCDGroup(ri, useGroup, remaining);
-              remaining = [];
-              placedAny = true;
-              break;
-            }
-
-            // Otherwise, look FORWARD ONLY for the next completely empty C/D group
-            // that can hold the tail. Never jump backward into earlier rooms.
+            // TAIL: choose the SMALLEST empty C/D group from the current room
+            // onward that can hold the remainder. This avoids wasting a D(9)
+            // when a C(6) later would fit, which was one of the main causes of
+            // excessive empty seats.
             type Cand = { ri: number; group: 'C' | 'D'; size: number };
             const cands: Cand[] = [];
-            for (let rj = ri + 1; rj < rooms.length; rj++) {
+            for (let rj = ri; rj < rooms.length; rj++) {
               if (isGroupEmpty(rj, 'C')) cands.push({ ri: rj, group: 'C', size: groupSizeOf(rj, 'C') });
               if (isGroupEmpty(rj, 'D')) cands.push({ ri: rj, group: 'D', size: groupSizeOf(rj, 'D') });
             }
-            const fits = cands
+            const target = cands
               .filter((c) => c.size >= remaining.length)
-              .sort((a, b) => a.ri - b.ri || a.size - b.size);
-            const target = fits[0];
+              .sort((a, b) => a.size - b.size || a.ri - b.ri)[0];
             if (target) {
               placeIntoCDGroup(target.ri, target.group, remaining);
               remaining = [];
