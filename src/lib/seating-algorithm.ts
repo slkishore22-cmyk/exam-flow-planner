@@ -610,14 +610,21 @@ export function allocateSeating(
       }
     };
 
+    // ELIGIBILITY RULE (user-defined):
+    // A leftover code may be used as a filler ONLY if:
+    //   (a) code.count <= 15  (fits inside a single A/B group slot), OR
+    //   (b) code.count == empty  (exactly completes the room's empty seats)
+    // No partial splits. No mid-room placement of oversize codes.
+
     // Try to find a combination of pool entries summing exactly to `target`.
-    // Returns the selected codes or null. Tries 1, then 2, then 3 codes.
+    // Each member of the combo must individually be eligible (count <= 15 or == target).
     const findExactCombo = (target: number, maxSize = 3): LeftoverCode[] | null => {
+      const eligible = pool.filter((c) => c.count <= 15 || c.count === target);
       // size 1
-      for (const c of pool) if (c.count === target) return [c];
+      for (const c of eligible) if (c.count === target) return [c];
       if (maxSize < 2) return null;
       // size 2
-      const sorted = [...pool].sort((a, b) => b.count - a.count);
+      const sorted = [...eligible].sort((a, b) => b.count - a.count);
       for (let i = 0; i < sorted.length; i++) {
         for (let j = i + 1; j < sorted.length; j++) {
           if (sorted[i].count + sorted[j].count === target) {
@@ -639,18 +646,21 @@ export function allocateSeating(
       return null;
     };
 
-    // Largest single code with count <= target (for under-fill loop)
+    // Largest single ELIGIBLE code (count <= 15) with count <= target.
+    // Oversize codes (>15) are never used as under-fill — they'd require splitting.
     const findLargestUnder = (target: number): LeftoverCode | null => {
       let best: LeftoverCode | null = null;
       for (const c of pool) {
+        if (c.count > 15) continue;
         if (c.count <= target && (!best || c.count > best.count)) best = c;
       }
       return best;
     };
 
-    // Largest pair sum <= target
+    // Largest pair sum <= target — both members must have count <= 15.
     const findLargestPairUnder = (target: number): LeftoverCode[] | null => {
-      const sorted = [...pool].sort((a, b) => b.count - a.count);
+      const eligible = pool.filter((c) => c.count <= 15);
+      const sorted = [...eligible].sort((a, b) => b.count - a.count);
       let best: LeftoverCode[] | null = null;
       let bestSum = 0;
       for (let i = 0; i < sorted.length; i++) {
@@ -735,38 +745,9 @@ export function allocateSeating(
             continue;
           }
 
-          // 6. SPLIT FALLBACK — take the largest leftover code and slice
-          // off `empty` students (preserving dept-largest-first order).
-          // The remainder is returned to the pool as a new LeftoverCode.
-          let biggest: LeftoverCode | null = null;
-          for (const c of pool) {
-            if (!biggest || c.count > biggest.count) biggest = c;
-          }
-          if (biggest && biggest.count > empty) {
-            const takeStudents = biggest.students.slice(0, empty);
-            const restStudents = biggest.students.slice(empty);
-            // Remove original from pool
-            removeFromPool([biggest]);
-            // Push remainder back
-            pool.push({
-              examCode: biggest.examCode,
-              students: restStudents,
-              count: restStudents.length,
-            });
-            // Place the slice directly (bypass placeIntoSlot's removeFromPool)
-            const slotList2 = roomSlots[ri][group];
-            const usedArr2 = group === 'A' ? usedA : usedB;
-            const groupSize2 = slotList2.length;
-            let qIdx = 0;
-            while (usedArr2[ri] < groupSize2 && qIdx < takeStudents.length) {
-              const pos = slotList2[usedArr2[ri]];
-              rooms[ri].grid[pos.row][pos.col] = takeStudents[qIdx];
-              rooms[ri].students.push(takeStudents[qIdx]);
-              usedArr2[ri]++;
-              qIdx++;
-            }
-            continue;
-          }
+          // No splitting allowed: oversize codes (>15) can only be used
+          // when their count exactly equals `empty` (handled in step 1).
+          // If we reach here, this group's remaining seats stay empty.
 
           // Truly nothing left — break
           break;
