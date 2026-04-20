@@ -57,11 +57,8 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="no-print">
-        <header className="flex items-center justify-between px-8 pt-6 pb-2 border-b border-border/60">
-          <VincLogo size="md" />
-          <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Seating Arrangement
-          </span>
+        <header className="flex items-center justify-center px-8 pt-6 pb-3 border-b border-border/60">
+          <VincLogo size="lg" />
         </header>
         <StepIndicator currentStep={currentStep} onStepClick={handleStepClick} />
       </div>
