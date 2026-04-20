@@ -4,7 +4,7 @@ import UploadScreen from '@/components/UploadScreen';
 import VerificationScreen from '@/components/VerificationScreen';
 import RoomConfigScreen from '@/components/RoomConfigScreen';
 import SeatingResultScreen from '@/components/SeatingResultScreen';
-import VincLogo from '@/components/VincLogo';
+
 import {
   PdfExtractionResult,
   StudentRecord,
@@ -57,9 +57,6 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="no-print">
-        <header className="flex items-center justify-center px-8 pt-6 pb-3 border-b border-border/60">
-          <VincLogo size="lg" />
-        </header>
         <StepIndicator currentStep={currentStep} onStepClick={handleStepClick} />
       </div>
       <div className="pb-16">
