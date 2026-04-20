@@ -1049,6 +1049,60 @@ export function allocateSeating(
   }
   // ===== END SLACK-FILLER PHASE =====
 
+  // ============================================================
+  // FINAL PASS — ROLL NUMBER SEQUENCE WITHIN EACH BLOCK
+  // For every room, group students that share the same (examCode +
+  // department) and currently sit within the same group (A/B/C/D),
+  // then reorder the students within their occupied seats so roll
+  // numbers read in ascending order following the seat fill order.
+  // This does NOT move any student to a different group/room —
+  // it only re-sequences rolls inside a contiguous block.
+  // ============================================================
+  const rollNumeric = (r: string) => {
+    const n = parseInt(r.replace(/\D/g, ''), 10);
+    return isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
+  };
+  const rollCompare = (a: StudentRecord, b: StudentRecord) => {
+    const an = rollNumeric(a.rollNumber);
+    const bn = rollNumeric(b.rollNumber);
+    if (an !== bn) return an - bn;
+    return a.rollNumber.localeCompare(b.rollNumber);
+  };
+
+  for (let ri = 0; ri < allRooms.length; ri++) {
+    const room = allRooms[ri];
+    const subCols = room.seatsPerColumn ?? seatsPerColumn;
+    // Collect occupied seats grouped by (group, examCode, department),
+    // preserving fill order (row-major).
+    type Seat = { row: number; col: number };
+    const buckets = new Map<string, { seats: Seat[]; students: StudentRecord[] }>();
+    for (let r = 0; r < room.grid.length; r++) {
+      for (let c = 0; c < room.grid[r].length; c++) {
+        const s = room.grid[r][c];
+        if (!s) continue;
+        const g = room.isGeneral
+          ? (c % subCols === 0 ? 'A' : 'B')
+          : getGroupLabel(r, c, subCols);
+        const key = `${g}|${s.examCode}|${normalizeDepartmentKey(s.department)}`;
+        if (!buckets.has(key)) buckets.set(key, { seats: [], students: [] });
+        const b = buckets.get(key)!;
+        b.seats.push({ row: r, col: c });
+        b.students.push(s);
+      }
+    }
+    // Re-place each bucket's students sorted by roll number into its seats.
+    for (const { seats, students } of buckets.values()) {
+      const sorted = [...students].sort(rollCompare);
+      for (let i = 0; i < seats.length; i++) {
+        room.grid[seats[i].row][seats[i].col] = sorted[i];
+      }
+    }
+    // Resync students[] in row-major order
+    const fresh: StudentRecord[] = [];
+    for (const row of room.grid) for (const cell of row) if (cell) fresh.push(cell);
+    room.students = fresh;
+  }
+
   // FINAL VERIFICATION: warn (in console) if any student is missing.
   const seatedCount = allRooms.reduce((sum, r) => {
     let n = 0;
