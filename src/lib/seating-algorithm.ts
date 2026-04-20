@@ -745,38 +745,9 @@ export function allocateSeating(
             continue;
           }
 
-          // 6. SPLIT FALLBACK — take the largest leftover code and slice
-          // off `empty` students (preserving dept-largest-first order).
-          // The remainder is returned to the pool as a new LeftoverCode.
-          let biggest: LeftoverCode | null = null;
-          for (const c of pool) {
-            if (!biggest || c.count > biggest.count) biggest = c;
-          }
-          if (biggest && biggest.count > empty) {
-            const takeStudents = biggest.students.slice(0, empty);
-            const restStudents = biggest.students.slice(empty);
-            // Remove original from pool
-            removeFromPool([biggest]);
-            // Push remainder back
-            pool.push({
-              examCode: biggest.examCode,
-              students: restStudents,
-              count: restStudents.length,
-            });
-            // Place the slice directly (bypass placeIntoSlot's removeFromPool)
-            const slotList2 = roomSlots[ri][group];
-            const usedArr2 = group === 'A' ? usedA : usedB;
-            const groupSize2 = slotList2.length;
-            let qIdx = 0;
-            while (usedArr2[ri] < groupSize2 && qIdx < takeStudents.length) {
-              const pos = slotList2[usedArr2[ri]];
-              rooms[ri].grid[pos.row][pos.col] = takeStudents[qIdx];
-              rooms[ri].students.push(takeStudents[qIdx]);
-              usedArr2[ri]++;
-              qIdx++;
-            }
-            continue;
-          }
+          // No splitting allowed: oversize codes (>15) can only be used
+          // when their count exactly equals `empty` (handled in step 1).
+          // If we reach here, this group's remaining seats stay empty.
 
           // Truly nothing left — break
           break;
