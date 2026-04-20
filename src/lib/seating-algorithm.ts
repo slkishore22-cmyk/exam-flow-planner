@@ -835,6 +835,151 @@ export function allocateSeating(
         }
       }
     }
+
+    // ================================================================
+    // PHASE 2 — C/D MIDDLE-ORDER FILL
+    // ----------------------------------------------------------------
+    // After A/B is fully filled, fill the middle Groups C (6 seats) and
+    // D (9 seats) of each room using whatever exam codes still remain
+    // in the pool.
+    //
+    // Rules (per user spec):
+    //   * Take the largest remaining code first.
+    //   * Pour it into successive rooms, room-by-room. In each room,
+    //     pick whichever of (C, D) is still completely empty:
+    //       - if BOTH empty: prefer C first (6), then next room D (9),
+    //         alternating so each pair of rooms = 15 students.
+    //       - if only D is empty (C already used by an earlier code in
+    //         that room): use D (9) in this room, then C (6) in the next.
+    //   * Each placement uses the FULL group capacity (6 or 9). The
+    //     code stays contiguous across rooms.
+    //   * Final TAIL (count < 15): find the next room whose still-empty
+    //     C or D group exactly matches the remaining count (6 or 9), or
+    //     any single empty C/D group large enough to hold it. Tail size
+    //     of e.g. 7 → place into an empty D (9), leaving 2 seats blank.
+    //   * Departments inside a code stay contiguous (largest dept first),
+    //     same ordering rule as A/B phase.
+    // ================================================================
+    {
+      const sortedPool = () =>
+        [...pool].sort((a, b) => b.count - a.count);
+
+      const placeIntoCDGroup = (
+        roomIdx: number,
+        group: 'C' | 'D',
+        students: StudentRecord[]
+      ): number => {
+        // Returns the number of students placed (capped at group size).
+        const slotList = roomSlots[roomIdx][group];
+        const groupSize = slotList.length;
+        // Count current usage of this group
+        let used = 0;
+        for (const s of slotList) {
+          if (rooms[roomIdx].grid[s.row][s.col] !== null) used++;
+        }
+        const capacity = groupSize - used;
+        const toPlace = Math.min(capacity, students.length);
+        for (let i = 0; i < toPlace; i++) {
+          const pos = slotList[used + i];
+          rooms[roomIdx].grid[pos.row][pos.col] = students[i];
+          rooms[roomIdx].students.push(students[i]);
+        }
+        return toPlace;
+      };
+
+      const isGroupEmpty = (roomIdx: number, group: 'C' | 'D'): boolean => {
+        const slotList = roomSlots[roomIdx][group];
+        for (const s of slotList) {
+          if (rooms[roomIdx].grid[s.row][s.col] !== null) return false;
+        }
+        return true;
+      };
+
+      const groupSizeOf = (roomIdx: number, group: 'C' | 'D'): number =>
+        roomSlots[roomIdx][group].length;
+
+      let mainGuard = 0;
+      while (mainGuard++ < 500) {
+        const queueCodes = sortedPool();
+        if (queueCodes.length === 0) break;
+        const code = queueCodes[0];
+
+        // Build flat student queue (largest dept already first per leftover build).
+        let remaining = [...code.students];
+
+        // Pour through successive rooms.
+        // Track which group we used "last" in the alternation so the next
+        // room takes the opposite group when both are empty.
+        let preferNext: 'C' | 'D' = 'C';
+        let placedAny = false;
+
+        for (let ri = 0; ri < rooms.length && remaining.length > 0; ri++) {
+          const cEmpty = isGroupEmpty(ri, 'C');
+          const dEmpty = isGroupEmpty(ri, 'D');
+          if (!cEmpty && !dEmpty) continue;
+
+          // Pick which group to use in THIS room
+          let useGroup: 'C' | 'D';
+          if (cEmpty && dEmpty) {
+            useGroup = preferNext;
+          } else if (cEmpty) {
+            useGroup = 'C';
+          } else {
+            useGroup = 'D';
+          }
+
+          const capacity = groupSizeOf(ri, useGroup);
+
+          // TAIL handling: if remaining < capacity, only place if remaining
+          // exactly fits OR this is the largest available slot we can find
+          // for it. Strategy: if remaining < smallest C/D size (6), still
+          // place into smallest available group ≥ remaining further down.
+          if (remaining.length >= capacity) {
+            const chunk = remaining.slice(0, capacity);
+            placeIntoCDGroup(ri, useGroup, chunk);
+            remaining = remaining.slice(capacity);
+            placedAny = true;
+            // Flip preference for next room
+            preferNext = useGroup === 'C' ? 'D' : 'C';
+          } else {
+            // TAIL: remaining < capacity. Try to find the BEST-fit empty
+            // C or D group across all rooms (smallest group ≥ remaining).
+            type Cand = { ri: number; group: 'C' | 'D'; size: number };
+            const cands: Cand[] = [];
+            for (let rj = 0; rj < rooms.length; rj++) {
+              if (isGroupEmpty(rj, 'C')) cands.push({ ri: rj, group: 'C', size: groupSizeOf(rj, 'C') });
+              if (isGroupEmpty(rj, 'D')) cands.push({ ri: rj, group: 'D', size: groupSizeOf(rj, 'D') });
+            }
+            const fits = cands.filter((c) => c.size >= remaining.length);
+            // Prefer exact match, else smallest group that fits, else largest available
+            fits.sort((a, b) => a.size - b.size);
+            const target = fits[0] ?? cands.sort((a, b) => b.size - a.size)[0];
+            if (!target) break;
+            placeIntoCDGroup(target.ri, target.group, remaining);
+            remaining = [];
+            placedAny = true;
+            break;
+          }
+        }
+
+        // Remove this code from pool whether or not fully placed (avoid loop)
+        const idx = pool.indexOf(code);
+        if (idx >= 0) pool.splice(idx, 1);
+
+        // If something remains and no progress, stop
+        if (remaining.length > 0 && !placedAny) break;
+        // If something remains, push it back as a smaller code so the next
+        // iteration can try to place it as a tail.
+        if (remaining.length > 0) {
+          pool.push({
+            examCode: code.examCode,
+            students: remaining,
+            count: remaining.length,
+          });
+        }
+      }
+    }
+    // ===== END PHASE 2 (C/D fill) =====
   }
   // ===== END SLACK-FILLER PHASE =====
 
