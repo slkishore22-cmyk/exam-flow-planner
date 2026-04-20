@@ -4,6 +4,7 @@ import UploadScreen from '@/components/UploadScreen';
 import VerificationScreen from '@/components/VerificationScreen';
 import RoomConfigScreen from '@/components/RoomConfigScreen';
 import SeatingResultScreen from '@/components/SeatingResultScreen';
+import vincLogo from '@/assets/vinc-logo.jpg';
 import {
   PdfExtractionResult,
   StudentRecord,
@@ -56,6 +57,9 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="no-print">
+        <header className="flex items-center justify-center pt-8">
+          <img src={vincLogo} alt="VIN-C logo" className="h-12 w-auto object-contain" />
+        </header>
         <StepIndicator currentStep={currentStep} onStepClick={handleStepClick} />
       </div>
       <div className="pb-16">
