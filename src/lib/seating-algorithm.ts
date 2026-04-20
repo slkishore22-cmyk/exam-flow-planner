@@ -33,6 +33,14 @@ interface RoomSlots {
   D: SeatPosition[];
 }
 
+function compareSeatPositionsByGroupPath(a: SeatPosition, b: SeatPosition, subCols: number): number {
+  const aMainCol = Math.floor(a.col / subCols);
+  const bMainCol = Math.floor(b.col / subCols);
+  if (aMainCol !== bMainCol) return aMainCol - bMainCol;
+  if (a.row !== b.row) return a.row - b.row;
+  return (a.col % subCols) - (b.col % subCols);
+}
+
 function normalizeDepartmentKey(department: string): string {
   return department
     .toUpperCase()
@@ -51,18 +59,10 @@ function buildRoomSlots(rows: number, mainCols: number, subCols: number): RoomSl
     }
   }
 
-  // Row-major fill: walk left-to-right across the entire row, then move to
-  // the next row. This makes the visual order (reading top-to-bottom,
-  // left-to-right) match the placement order within each group.
-  const sortByRowMajor = (a: SeatPosition, b: SeatPosition) => {
-    if (a.row !== b.row) return a.row - b.row;
-    return a.col - b.col;
-  };
-
-  slots.A.sort(sortByRowMajor);
-  slots.B.sort(sortByRowMajor);
-  slots.C.sort(sortByRowMajor);
-  slots.D.sort(sortByRowMajor);
+  slots.A.sort((a, b) => compareSeatPositionsByGroupPath(a, b, subCols));
+  slots.B.sort((a, b) => compareSeatPositionsByGroupPath(a, b, subCols));
+  slots.C.sort((a, b) => compareSeatPositionsByGroupPath(a, b, subCols));
+  slots.D.sort((a, b) => compareSeatPositionsByGroupPath(a, b, subCols));
 
   return slots;
 }
