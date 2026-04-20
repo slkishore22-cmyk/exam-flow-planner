@@ -1094,8 +1094,16 @@ export function allocateSeating(
         b.students.push(s);
       }
     }
-    // Re-place each bucket's students sorted by roll number into its seats.
+    // Re-place each bucket's students sorted by roll number into the real
+    // group seat path (main column by main column, then top-to-bottom).
     for (const { seats, students } of buckets.values()) {
+      seats.sort((a, b) => {
+        const aMainCol = Math.floor(a.col / subCols);
+        const bMainCol = Math.floor(b.col / subCols);
+        if (aMainCol !== bMainCol) return aMainCol - bMainCol;
+        if (a.row !== b.row) return a.row - b.row;
+        return (a.col % subCols) - (b.col % subCols);
+      });
       const sorted = [...students].sort(rollCompare);
       for (let i = 0; i < seats.length; i++) {
         room.grid[seats[i].row][seats[i].col] = sorted[i];
