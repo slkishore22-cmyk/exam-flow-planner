@@ -1,5 +1,5 @@
 import React from 'react';
-import vincLogoExact from '@/assets/vinc-logo-exact.png';
+import vincMark from '@/assets/vinc-mark.png';
 
 interface VincLogoProps {
   className?: string;
@@ -12,7 +12,7 @@ const VincLogo: React.FC<VincLogoProps> = ({ className = '', size = 'md' }) => {
 
   return (
     <img
-      src={vincLogoExact}
+      src={vincMark}
       alt="VIN-C logo"
       className={`w-auto object-contain ${heightClass} ${className}`}
       loading="eager"
