@@ -32,12 +32,19 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room }) => {
     return list;
   }, [room]);
 
-  // Split seats into 3 equal vertical chunks; fill row-major across the chunks.
+  // Single combined table: each row holds 3 (roll|seat) pairs side-by-side.
+  // Fill DOWN each panel column first (column-major) so reading top-to-bottom
+  // in column 1, then column 2, then column 3 gives the seat sequence.
   const PANELS = 3;
   const rowsPerPanel = Math.ceil(seats.length / PANELS);
-  const panels: SeatEntry[][] = Array.from({ length: PANELS }, (_, p) =>
-    seats.slice(p * rowsPerPanel, (p + 1) * rowsPerPanel)
-  );
+  const tableRows: (SeatEntry | null)[][] = [];
+  for (let r = 0; r < rowsPerPanel; r++) {
+    const row: (SeatEntry | null)[] = [];
+    for (let p = 0; p < PANELS; p++) {
+      row.push(seats[p * rowsPerPanel + r] || null);
+    }
+    tableRows.push(row);
+  }
 
   // Subject summary
   const subjectSummary = useMemo(() => {
