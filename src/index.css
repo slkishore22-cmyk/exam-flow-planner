@@ -79,8 +79,8 @@
 
 @media print {
   @page {
-    size: A4 portrait;
-    margin: 15mm;
+    size: A4 landscape;
+    margin: 15mm 10mm;
   }
 
   * {
@@ -285,4 +285,116 @@
 
 .seat-cell {
   transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+@media print {
+  body * { visibility: hidden; }
+  #print-area, #print-area * { visibility: visible; }
+  #print-area {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    font-family: 'Times New Roman', serif;
+    font-size: 9pt;
+    color: #000;
+  }
+
+  .print-seating-sheet {
+    page-break-inside: avoid;
+    page-break-after: always;
+  }
+  .print-seating-sheet:last-child { page-break-after: auto; }
+
+  .ps-header { text-align: center; margin-bottom: 6px; }
+  .ps-h1 { font-size: 13pt; font-weight: 700; }
+  .ps-h2 { font-size: 11pt; font-weight: 700; margin-top: 1px; }
+  .ps-h3 { font-size: 10pt; font-weight: 600; margin-top: 1px; }
+
+  .ps-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid #000 !important;
+    border-bottom: 1px solid #000 !important;
+    padding: 3px 4px;
+    font-size: 9pt;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .ps-panels {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+
+  .ps-seat-table {
+    border-collapse: collapse;
+    flex: 1;
+    table-layout: fixed;
+  }
+  .ps-seat-table th,
+  .ps-seat-table td {
+    border: 1px solid #000 !important;
+    padding: 1px 4px;
+    font-size: 8pt;
+    line-height: 1.15;
+  }
+  .ps-seat-table th {
+    font-weight: 700;
+    text-align: center;
+    background: #f0f0f0 !important;
+  }
+  .ps-roll {
+    text-align: left;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+  }
+  .ps-seat {
+    text-align: right;
+    width: 30px;
+    font-size: 7pt;
+    color: #333 !important;
+  }
+
+  .ps-bottom {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-top: 6px;
+  }
+  .ps-bottom-left { flex: 1.2; }
+  .ps-bottom-right { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+  .ps-summary-table,
+  .ps-count-table,
+  .ps-malpractice-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 9pt;
+  }
+  .ps-summary-table th,
+  .ps-summary-table td,
+  .ps-count-table th,
+  .ps-count-table td,
+  .ps-malpractice-table th,
+  .ps-malpractice-table td {
+    border: 1px solid #000 !important;
+    padding: 3px 6px;
+  }
+  .ps-summary-table th,
+  .ps-malpractice-table th {
+    font-weight: 700;
+    text-align: center;
+    background: #f0f0f0 !important;
+  }
+  .ps-num { text-align: center; }
+  .ps-blank { height: 16px; }
+
+  .ps-footer {
+    margin-top: 12px;
+    font-size: 9pt;
+    font-weight: 600;
+  }
 }

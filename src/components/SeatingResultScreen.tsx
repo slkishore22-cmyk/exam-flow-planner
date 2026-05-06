@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor, getGroupLabel } from '@/lib/seating-utils';
 import PrintRoomLayout, { getDeptShape } from './PrintRoomLayout';
+import PrintSeatingLayout from './PrintSeatingLayout';
 
 interface SeatingResultScreenProps {
   rooms: RoomAllocation[];
@@ -411,12 +412,12 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       </div>
 
       {/* Print-only layout */}
-      <div ref={printRef} className="hidden print:block print-root">
+      <div ref={printRef} id="print-area" className="hidden print:block print-root">
         {(printMode === 'single' ? [rooms[activeRoom]] : rooms).map((room, i, arr) => {
           const isLast = i === arr.length - 1;
           return (
             <div key={room.roomNumber} className={!isLast ? 'page-break' : ''}>
-              <PrintRoomLayout room={room} config={config} deptShapeMap={deptShapeMap} />
+              <PrintSeatingLayout room={room} />
             </div>
           );
         })}
