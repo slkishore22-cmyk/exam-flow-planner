@@ -322,17 +322,11 @@
     margin-bottom: 6px;
   }
 
-  .ps-panels {
-    display: flex;
-    gap: 6px;
-    align-items: flex-start;
-    margin-bottom: 8px;
-  }
-
   .ps-seat-table {
     border-collapse: collapse;
-    flex: 1;
+    width: 100%;
     table-layout: fixed;
+    margin-bottom: 8px;
   }
   .ps-seat-table th,
   .ps-seat-table td {
