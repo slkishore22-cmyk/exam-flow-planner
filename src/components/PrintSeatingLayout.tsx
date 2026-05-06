@@ -78,27 +78,31 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room }) => {
         <div>ROOM NO: {room.roomNumber}</div>
       </div>
 
-      {/* SEATING TABLE — 3 panels side by side */}
-      <div className="ps-panels">
-        {panels.map((panel, pi) => (
-          <table key={pi} className="ps-seat-table">
-            <thead>
-              <tr>
+      {/* SEATING TABLE — single table, 3 (roll|seat) pairs per row */}
+      <table className="ps-seat-table">
+        <thead>
+          <tr>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <React.Fragment key={i}>
                 <th>ROLL NUMBER</th>
                 <th>SEAT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {panel.map(s => (
-                <tr key={s.seatNumber}>
-                  <td className="ps-roll">{s.rollNumber}</td>
-                  <td className="ps-seat">{s.seatNumber}</td>
-                </tr>
+              </React.Fragment>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {tableRows.map((row, ri) => (
+            <tr key={ri}>
+              {row.map((s, ci) => (
+                <React.Fragment key={ci}>
+                  <td className="ps-roll">{s ? s.rollNumber : ''}</td>
+                  <td className="ps-seat">{s ? s.seatNumber : ''}</td>
+                </React.Fragment>
               ))}
-            </tbody>
-          </table>
-        ))}
-      </div>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
       {/* BOTTOM SECTION */}
       <div className="ps-bottom">
