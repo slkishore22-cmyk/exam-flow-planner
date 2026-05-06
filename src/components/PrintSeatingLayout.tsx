@@ -32,19 +32,13 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room }) => {
     return list;
   }, [room]);
 
-  // Single combined table: each row holds 3 (roll|seat) pairs side-by-side.
-  // Fill DOWN each panel column first (column-major) so reading top-to-bottom
-  // in column 1, then column 2, then column 3 gives the seat sequence.
-  const PANELS = 3;
-  const rowsPerPanel = Math.ceil(seats.length / PANELS);
-  const tableRows: (SeatEntry | null)[][] = [];
-  for (let r = 0; r < rowsPerPanel; r++) {
-    const row: (SeatEntry | null)[] = [];
-    for (let p = 0; p < PANELS; p++) {
-      row.push(seats[p * rowsPerPanel + r] || null);
-    }
-    tableRows.push(row);
-  }
+  // Fixed grid: 3 MAIN tables × (3 SUB-cols of roll+seat) × 5 ROWS.
+  // Fill order: within a main, fill column-by-column (sub) top-to-bottom,
+  // then move to next main. Total 45 per sheet.
+  const ROWS = 5;
+  const SUBS = 3;
+  const MAINS = 3;
+  const PER_MAIN = SUBS * ROWS; // 15
 
   // Subject summary
   const subjectSummary = useMemo(() => {
@@ -78,31 +72,29 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room }) => {
         <div>ROOM NO: {room.roomNumber}</div>
       </div>
 
-      {/* SEATING TABLE — single table, 3 (roll|seat) pairs per row */}
-      <table className="ps-seat-table">
-        <thead>
-          <tr>
-            {Array.from({ length: 3 }).map((_, i) => (
-              <React.Fragment key={i}>
-                <th>ROLL NUMBER</th>
-                <th>SEAT</th>
-              </React.Fragment>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {tableRows.map((row, ri) => (
-            <tr key={ri}>
-              {row.map((s, ci) => (
-                <React.Fragment key={ci}>
-                  <td className="ps-roll">{s ? s.rollNumber : ''}</td>
-                  <td className="ps-seat">{s ? s.seatNumber : ''}</td>
-                </React.Fragment>
+      {/* SEATING TABLES — 3 main tables side by side, each 3 sub-cols × 5 rows */}
+      <div className="ps-panels">
+        {Array.from({ length: MAINS }).map((_, m) => (
+          <table key={m} className="ps-seat-table">
+            <tbody>
+              {Array.from({ length: ROWS }).map((_, r) => (
+                <tr key={r}>
+                  {Array.from({ length: SUBS }).map((_, s) => {
+                    const idx = m * PER_MAIN + s * ROWS + r;
+                    const entry = seats[idx] || null;
+                    return (
+                      <React.Fragment key={s}>
+                        <td className="ps-roll">{entry ? entry.rollNumber : ''}</td>
+                        <td className="ps-seat">{entry ? entry.seatNumber : ''}</td>
+                      </React.Fragment>
+                    );
+                  })}
+                </tr>
               ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            </tbody>
+          </table>
+        ))}
+      </div>
 
       {/* BOTTOM SECTION */}
       <div className="ps-bottom">
