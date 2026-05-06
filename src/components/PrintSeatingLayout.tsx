@@ -32,12 +32,19 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room }) => {
     return list;
   }, [room]);
 
-  // Split seats into 3 equal vertical chunks; fill row-major across the chunks.
+  // Single combined table: each row holds 3 (roll|seat) pairs side-by-side.
+  // Fill DOWN each panel column first (column-major) so reading top-to-bottom
+  // in column 1, then column 2, then column 3 gives the seat sequence.
   const PANELS = 3;
   const rowsPerPanel = Math.ceil(seats.length / PANELS);
-  const panels: SeatEntry[][] = Array.from({ length: PANELS }, (_, p) =>
-    seats.slice(p * rowsPerPanel, (p + 1) * rowsPerPanel)
-  );
+  const tableRows: (SeatEntry | null)[][] = [];
+  for (let r = 0; r < rowsPerPanel; r++) {
+    const row: (SeatEntry | null)[] = [];
+    for (let p = 0; p < PANELS; p++) {
+      row.push(seats[p * rowsPerPanel + r] || null);
+    }
+    tableRows.push(row);
+  }
 
   // Subject summary
   const subjectSummary = useMemo(() => {
@@ -71,27 +78,31 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room }) => {
         <div>ROOM NO: {room.roomNumber}</div>
       </div>
 
-      {/* SEATING TABLE — 3 panels side by side */}
-      <div className="ps-panels">
-        {panels.map((panel, pi) => (
-          <table key={pi} className="ps-seat-table">
-            <thead>
-              <tr>
+      {/* SEATING TABLE — single table, 3 (roll|seat) pairs per row */}
+      <table className="ps-seat-table">
+        <thead>
+          <tr>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <React.Fragment key={i}>
                 <th>ROLL NUMBER</th>
                 <th>SEAT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {panel.map(s => (
-                <tr key={s.seatNumber}>
-                  <td className="ps-roll">{s.rollNumber}</td>
-                  <td className="ps-seat">{s.seatNumber}</td>
-                </tr>
+              </React.Fragment>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {tableRows.map((row, ri) => (
+            <tr key={ri}>
+              {row.map((s, ci) => (
+                <React.Fragment key={ci}>
+                  <td className="ps-roll">{s ? s.rollNumber : ''}</td>
+                  <td className="ps-seat">{s ? s.seatNumber : ''}</td>
+                </React.Fragment>
               ))}
-            </tbody>
-          </table>
-        ))}
-      </div>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
       {/* BOTTOM SECTION */}
       <div className="ps-bottom">
