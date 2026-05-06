@@ -65,38 +65,29 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room }) => {
         <div className="ps-h3">MAIN BUILDING</div>
       </div>
 
-      {/* META */}
-      <div className="ps-meta">
-        <div>DATE: ____________</div>
-        <div>SESSION: ________</div>
-        <div>ROOM NO: {room.roomNumber}</div>
-      </div>
-
-      {/* SEATING TABLE — single table, 3 (roll|seat) pairs per row */}
-      <table className="ps-seat-table">
-        <thead>
-          <tr>
-            {Array.from({ length: 3 }).map((_, i) => (
-              <React.Fragment key={i}>
-                <th>ROLL NUMBER</th>
-                <th>SEAT</th>
-              </React.Fragment>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {tableRows.map((row, ri) => (
-            <tr key={ri}>
-              {row.map((s, ci) => (
-                <React.Fragment key={ci}>
-                  <td className="ps-roll">{s ? s.rollNumber : ''}</td>
-                  <td className="ps-seat">{s ? s.seatNumber : ''}</td>
-                </React.Fragment>
+      {/* SEATING TABLES — 3 main tables side by side, each 3 sub-cols × 5 rows */}
+      <div className="ps-panels">
+        {Array.from({ length: MAINS }).map((_, m) => (
+          <table key={m} className="ps-seat-table">
+            <tbody>
+              {Array.from({ length: ROWS }).map((_, r) => (
+                <tr key={r}>
+                  {Array.from({ length: SUBS }).map((_, s) => {
+                    const idx = m * PER_MAIN + s * ROWS + r;
+                    const entry = seats[idx] || null;
+                    return (
+                      <React.Fragment key={s}>
+                        <td className="ps-roll">{entry ? entry.rollNumber : ''}</td>
+                        <td className="ps-seat">{entry ? entry.seatNumber : ''}</td>
+                      </React.Fragment>
+                    );
+                  })}
+                </tr>
               ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            </tbody>
+          </table>
+        ))}
+      </div>
 
       {/* BOTTOM SECTION */}
       <div className="ps-bottom">
