@@ -322,34 +322,35 @@
     margin-bottom: 6px;
   }
 
-  .ps-seat-table {
-    border-collapse: collapse;
-    width: 100%;
-    table-layout: fixed;
+  .ps-panels {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
     margin-bottom: 8px;
   }
-  .ps-seat-table th,
+  .ps-seat-table {
+    border-collapse: collapse;
+    flex: 1;
+    table-layout: fixed;
+  }
   .ps-seat-table td {
     border: 1px solid #000 !important;
-    padding: 1px 4px;
-    font-size: 8pt;
-    line-height: 1.15;
-  }
-  .ps-seat-table th {
-    font-weight: 700;
-    text-align: center;
-    background: #f0f0f0 !important;
+    padding: 4px 5px;
+    font-size: 9pt;
+    line-height: 1.2;
+    height: 28px;
   }
   .ps-roll {
     text-align: left;
-    font-weight: 700;
-    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    font-family: 'Times New Roman', serif;
+    white-space: nowrap;
   }
   .ps-seat {
-    text-align: right;
-    width: 30px;
-    font-size: 7pt;
-    color: #333 !important;
+    text-align: center;
+    width: 22px;
+    font-size: 8pt;
+    color: #000 !important;
   }
 
   .ps-bottom {
