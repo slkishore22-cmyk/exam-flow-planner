@@ -32,19 +32,13 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room }) => {
     return list;
   }, [room]);
 
-  // Single combined table: each row holds 3 (roll|seat) pairs side-by-side.
-  // Fill DOWN each panel column first (column-major) so reading top-to-bottom
-  // in column 1, then column 2, then column 3 gives the seat sequence.
-  const PANELS = 3;
-  const rowsPerPanel = Math.ceil(seats.length / PANELS);
-  const tableRows: (SeatEntry | null)[][] = [];
-  for (let r = 0; r < rowsPerPanel; r++) {
-    const row: (SeatEntry | null)[] = [];
-    for (let p = 0; p < PANELS; p++) {
-      row.push(seats[p * rowsPerPanel + r] || null);
-    }
-    tableRows.push(row);
-  }
+  // Fixed grid: 3 MAIN tables × (3 SUB-cols of roll+seat) × 5 ROWS.
+  // Fill order: within a main, fill column-by-column (sub) top-to-bottom,
+  // then move to next main. Total 45 per sheet.
+  const ROWS = 5;
+  const SUBS = 3;
+  const MAINS = 3;
+  const PER_MAIN = SUBS * ROWS; // 15
 
   // Subject summary
   const subjectSummary = useMemo(() => {
