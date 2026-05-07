@@ -522,7 +522,13 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       </div>
 
       {showQrModal && isPublished && (() => {
-        const studentPageUrl = `${window.location.origin}/student?session=${publishedSessionId}`;
+        // Always use the public published domain for the QR — preview URLs are gated by Lovable auth.
+        const host = window.location.host;
+        const isPreview = host.includes('lovableproject.com') || host.includes('id-preview--');
+        const publicOrigin = isPreview
+          ? 'https://exam-flow-planner.lovable.app'
+          : window.location.origin;
+        const studentPageUrl = `${publicOrigin}/student?session=${publishedSessionId}`;
         return (
           <div className="no-print" style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
