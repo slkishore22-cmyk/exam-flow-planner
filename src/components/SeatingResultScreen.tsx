@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor, getGroupLabel } from '@/lib/seating-utils';
 import PrintRoomLayout, { getDeptShape } from './PrintRoomLayout';
 import PrintSeatingLayout from './PrintSeatingLayout';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SeatingResultScreenProps {
   rooms: RoomAllocation[];
