@@ -13,7 +13,7 @@ interface SeatEntry {
   department: string;
 }
 
-const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room }) => {
+const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room, roomLabel }) => {
   const seats: SeatEntry[] = useMemo(() => {
     const list: SeatEntry[] = [];
     let seatNo = 0;
