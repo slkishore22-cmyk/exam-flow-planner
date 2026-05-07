@@ -22,7 +22,12 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const [publishedSessionId, setPublishedSessionId] = useState<string>('');
   const [showQrModal, setShowQrModal] = useState(false);
   const [totalPublished, setTotalPublished] = useState(0);
+  const [roomLabels, setRoomLabels] = useState<Record<number, string>>({});
+  const [editingRoom, setEditingRoom] = useState<number | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
+
+  const getRoomLabel = (room: RoomAllocation) =>
+    (roomLabels[room.roomNumber]?.trim()) || String(room.roomNumber);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -136,7 +141,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       const sessionId = `session_${Date.now()}`;
       const rows: Array<{
         roll_number: string;
-        room_number: number;
+        room_number: string;
         seat_number: number;
         exam_code: string | null;
         dept: string | null;
@@ -146,12 +151,13 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       const publishedAt = new Date().toISOString();
       const seen = new Set<string>();
       rooms.forEach(room => {
+        const label = (roomLabels[room.roomNumber] ?? String(room.roomNumber)).trim() || String(room.roomNumber);
         room.students.forEach((student, idx) => {
           if (!student?.rollNumber || seen.has(student.rollNumber)) return;
           seen.add(student.rollNumber);
           rows.push({
             roll_number: student.rollNumber.toUpperCase(),
-            room_number: Number(room.roomNumber),
+            room_number: label,
             seat_number: idx + 1,
             exam_code: student.examCode || null,
             dept: student.department || null,
@@ -367,7 +373,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
               if (v === 0) return null;
               return (
                 <span key={i} className="text-xs font-semibold px-2 py-1 rounded" style={{ backgroundColor: '#FEE2E2', color: '#DC2626' }}>
-                  Room {room.roomNumber}: {v} violation{v !== 1 ? 's' : ''}
+                  Room {getRoomLabel(room)}: {v} violation{v !== 1 ? 's' : ''}
                 </span>
               );
             })}
@@ -376,9 +382,10 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       )}
 
       {/* Room tabs */}
-      <div className="no-print flex flex-wrap gap-2 mb-6 justify-center">
+      <div className="no-print flex flex-wrap gap-2 mb-4 justify-center">
         {rooms.map((room, i) => {
           const hasViolation = roomViolations[i].count > 0;
+          const label = getRoomLabel(room);
           return (
             <button
               key={i}
@@ -390,11 +397,29 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
               }`}
               style={hasViolation && i !== activeRoom ? { borderColor: '#EF4444' } : undefined}
             >
-              Room {room.roomNumber}
+              Room {label}
               {hasViolation && <span style={{ color: '#EF4444' }}> •</span>}
             </button>
           );
         })}
+      </div>
+
+      {/* Room name editor */}
+      <div className="no-print mb-6 flex items-center justify-center gap-2 flex-wrap">
+        <span className="text-xs text-muted-foreground">Rename room:</span>
+        {rooms.map((room, i) => (
+          <div key={i} className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">#{room.roomNumber} →</span>
+            <input
+              type="text"
+              value={roomLabels[room.roomNumber] ?? ''}
+              onChange={e => setRoomLabels(prev => ({ ...prev, [room.roomNumber]: e.target.value }))}
+              placeholder={String(room.roomNumber)}
+              maxLength={20}
+              className="px-2 py-1 text-xs border border-border rounded-md bg-background w-24 focus:outline-none focus:ring-1 focus:ring-foreground"
+            />
+          </div>
+        ))}
       </div>
 
       {/* Exam code reveal bar — universal across all rooms */}
@@ -447,7 +472,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       {/* Active room grid */}
       <div className="no-print">
         <h3 className="text-xl font-bold text-center mb-4">
-          Room {rooms[activeRoom].roomNumber}
+          Room {getRoomLabel(rooms[activeRoom])}
           {rooms[activeRoom].isGeneral && (
             <span className="text-xs font-semibold ml-2 px-2 py-0.5 rounded-full" style={{ background: 'hsl(45, 100%, 90%)', color: 'hsl(35, 80%, 35%)' }}>
               GENERAL
@@ -546,7 +571,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           const isLast = i === arr.length - 1;
           return (
             <div key={room.roomNumber} className={!isLast ? 'page-break' : ''}>
-              <PrintSeatingLayout room={room} />
+              <PrintSeatingLayout room={room} roomLabel={getRoomLabel(room)} />
             </div>
           );
         })}

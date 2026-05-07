@@ -3,7 +3,7 @@ import { publicSupabase } from '@/integrations/supabase/public-client';
 
 interface SeatResult {
   roll_number: string;
-  room_number: number;
+  room_number: string;
   seat_number: number;
   exam_code: string | null;
   dept: string | null;

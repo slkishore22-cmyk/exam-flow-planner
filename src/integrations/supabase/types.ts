@@ -21,7 +21,7 @@ export type Database = {
           id: string
           published_at: string
           roll_number: string
-          room_number: number
+          room_number: string
           seat_number: number
           session_id: string
         }
@@ -31,7 +31,7 @@ export type Database = {
           id?: string
           published_at?: string
           roll_number: string
-          room_number: number
+          room_number: string
           seat_number: number
           session_id: string
         }
@@ -41,7 +41,7 @@ export type Database = {
           id?: string
           published_at?: string
           roll_number?: string
-          room_number?: number
+          room_number?: string
           seat_number?: number
           session_id?: string
         }
