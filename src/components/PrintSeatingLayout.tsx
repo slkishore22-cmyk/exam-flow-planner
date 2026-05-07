@@ -92,8 +92,7 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room, roomLabel
               {Array.from({ length: ROWS }).map((_, r) => (
                 <tr key={r}>
                   {Array.from({ length: SUBS }).map((_, s) => {
-                    const idx = m * PER_MAIN + s * ROWS + r;
-                    const entry = seats[idx] || null;
+                    const entry = cellMap[`${m}-${s}-${r}`] || null;
                     return (
                       <React.Fragment key={s}>
                         <td className="ps-roll">{entry ? entry.rollNumber : ''}</td>
