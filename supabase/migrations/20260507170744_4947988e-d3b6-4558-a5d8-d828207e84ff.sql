@@ -1,0 +1,1 @@
+ALTER TABLE public.exam_seating_lookup ALTER COLUMN room_number TYPE text USING room_number::text;
