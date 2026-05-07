@@ -3,6 +3,7 @@ import { RoomAllocation } from '@/lib/seating-utils';
 
 interface PrintSeatingLayoutProps {
   room: RoomAllocation;
+  roomLabel?: string;
 }
 
 interface SeatEntry {
