@@ -373,7 +373,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
               if (v === 0) return null;
               return (
                 <span key={i} className="text-xs font-semibold px-2 py-1 rounded" style={{ backgroundColor: '#FEE2E2', color: '#DC2626' }}>
-                  Room {room.roomNumber}: {v} violation{v !== 1 ? 's' : ''}
+                  Room {getRoomLabel(room)}: {v} violation{v !== 1 ? 's' : ''}
                 </span>
               );
             })}
