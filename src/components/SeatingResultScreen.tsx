@@ -129,6 +129,65 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
     return <div className="text-center py-20 text-muted-foreground">No rooms to display.</div>;
   }
 
+  const handlePublish = async () => {
+    if (publishing || isPublished) return;
+    setPublishing(true);
+    try {
+      const sessionId = `session_${Date.now()}`;
+      const rows: Array<{
+        roll_number: string;
+        room_number: number;
+        seat_number: number;
+        exam_code: string | null;
+        dept: string | null;
+        session_id: string;
+        published_at: string;
+      }> = [];
+      const publishedAt = new Date().toISOString();
+      const seen = new Set<string>();
+      rooms.forEach(room => {
+        room.students.forEach((student, idx) => {
+          if (!student?.rollNumber || seen.has(student.rollNumber)) return;
+          seen.add(student.rollNumber);
+          rows.push({
+            roll_number: student.rollNumber.toUpperCase(),
+            room_number: Number(room.roomNumber),
+            seat_number: idx + 1,
+            exam_code: student.examCode || null,
+            dept: student.department || null,
+            session_id: sessionId,
+            published_at: publishedAt,
+          });
+        });
+      });
+
+      const { error } = await supabase
+        .from('exam_seating_lookup')
+        .upsert(rows, { onConflict: 'roll_number,session_id' });
+      if (error) throw error;
+
+      const { error: sessErr } = await supabase
+        .from('exam_sessions')
+        .upsert([{
+          session_id: sessionId,
+          total_students: rows.length,
+          total_rooms: rooms.length,
+          published_at: publishedAt,
+          is_active: true,
+        }]);
+      if (sessErr) throw sessErr;
+
+      setPublishedSessionId(sessionId);
+      setTotalPublished(rows.length);
+      setIsPublished(true);
+      setShowQrModal(true);
+    } catch (e: any) {
+      alert('Publish failed: ' + (e?.message || 'Unknown error'));
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const triggerPrint = (mode: 'all' | 'single') => {
     setPrintMode(mode);
     setTimeout(() => {
