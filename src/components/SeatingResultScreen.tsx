@@ -17,6 +17,11 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const [activeRoom, setActiveRoom] = useState(0);
   const [visibleExamCodes, setVisibleExamCodes] = useState<Set<string>>(new Set());
   const [printMode, setPrintMode] = useState<'all' | 'single' | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [isPublished, setIsPublished] = useState(false);
+  const [publishedSessionId, setPublishedSessionId] = useState<string>('');
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [totalPublished, setTotalPublished] = useState(0);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
