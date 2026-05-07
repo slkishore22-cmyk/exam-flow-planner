@@ -28,7 +28,7 @@ export default function StudentPage() {
     setError('');
     setResult(null);
 
-    let query = supabase
+    let query = publicSupabase
       .from('exam_seating_lookup')
       .select('*')
       .eq('roll_number', rollInput.trim().toUpperCase());
