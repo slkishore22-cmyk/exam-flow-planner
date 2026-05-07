@@ -14,32 +14,43 @@ interface SeatEntry {
 }
 
 const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room, roomLabel }) => {
-  const seats: SeatEntry[] = useMemo(() => {
-    const list: SeatEntry[] = [];
-    let seatNo = 0;
-    for (let r = 0; r < room.grid.length; r++) {
-      for (let c = 0; c < (room.grid[r]?.length || 0); c++) {
-        const s = room.grid[r][c];
-        if (!s) continue;
-        seatNo++;
-        list.push({
-          seatNumber: seatNo,
-          rollNumber: s.rollNumber,
-          examCode: s.examCode,
-          department: s.department,
-        });
-      }
-    }
-    return list;
-  }, [room]);
-
-  // Fixed grid: 3 MAIN tables × (3 SUB-cols of roll+seat) × 5 ROWS.
-  // Fill order: within a main, fill column-by-column (sub) top-to-bottom,
-  // then move to next main. Total 45 per sheet.
+  // Fixed grid: 3 MAIN tables × 3 SUB cols × 5 ROWS, mapped DIRECTLY from
+  // room.grid so empty cells in the allocation stay empty in print too.
   const ROWS = 5;
   const SUBS = 3;
   const MAINS = 3;
-  const PER_MAIN = SUBS * ROWS; // 15
+
+  // Build a position->seatNumber map preserving empties.
+  // Numbering: row-by-row, col-by-col, only occupied cells get numbers.
+  const { cellMap, allSeats } = useMemo(() => {
+    const map: Record<string, SeatEntry | null> = {};
+    const flat: SeatEntry[] = [];
+    let seatNo = 0;
+    for (let r = 0; r < ROWS; r++) {
+      for (let m = 0; m < MAINS; m++) {
+        for (let s = 0; s < SUBS; s++) {
+          const c = m * SUBS + s;
+          const stu = room.grid[r]?.[c] ?? null;
+          if (stu) {
+            seatNo++;
+            const e: SeatEntry = {
+              seatNumber: seatNo,
+              rollNumber: stu.rollNumber,
+              examCode: stu.examCode,
+              department: stu.department,
+            };
+            map[`${m}-${s}-${r}`] = e;
+            flat.push(e);
+          } else {
+            map[`${m}-${s}-${r}`] = null;
+          }
+        }
+      }
+    }
+    return { cellMap: map, allSeats: flat };
+  }, [room]);
+
+  const seats = allSeats;
 
   // Subject summary
   const subjectSummary = useMemo(() => {
@@ -81,8 +92,7 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room, roomLabel
               {Array.from({ length: ROWS }).map((_, r) => (
                 <tr key={r}>
                   {Array.from({ length: SUBS }).map((_, s) => {
-                    const idx = m * PER_MAIN + s * ROWS + r;
-                    const entry = seats[idx] || null;
+                    const entry = cellMap[`${m}-${s}-${r}`] || null;
                     return (
                       <React.Fragment key={s}>
                         <td className="ps-roll">{entry ? entry.rollNumber : ''}</td>
