@@ -14,7 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      exam_seating_lookup: {
+        Row: {
+          dept: string | null
+          exam_code: string | null
+          id: string
+          published_at: string
+          roll_number: string
+          room_number: number
+          seat_number: number
+          session_id: string
+        }
+        Insert: {
+          dept?: string | null
+          exam_code?: string | null
+          id?: string
+          published_at?: string
+          roll_number: string
+          room_number: number
+          seat_number: number
+          session_id: string
+        }
+        Update: {
+          dept?: string | null
+          exam_code?: string | null
+          id?: string
+          published_at?: string
+          roll_number?: string
+          room_number?: number
+          seat_number?: number
+          session_id?: string
+        }
+        Relationships: []
+      }
+      exam_sessions: {
+        Row: {
+          is_active: boolean
+          published_at: string
+          session_id: string
+          total_rooms: number | null
+          total_students: number | null
+        }
+        Insert: {
+          is_active?: boolean
+          published_at?: string
+          session_id: string
+          total_rooms?: number | null
+          total_students?: number | null
+        }
+        Update: {
+          is_active?: boolean
+          published_at?: string
+          session_id?: string
+          total_rooms?: number | null
+          total_students?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

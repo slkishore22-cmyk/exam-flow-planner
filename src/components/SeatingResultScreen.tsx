@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor, getGroupLabel } from '@/lib/seating-utils';
 import PrintRoomLayout, { getDeptShape } from './PrintRoomLayout';
 import PrintSeatingLayout from './PrintSeatingLayout';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SeatingResultScreenProps {
   rooms: RoomAllocation[];
@@ -15,6 +17,11 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const [activeRoom, setActiveRoom] = useState(0);
   const [visibleExamCodes, setVisibleExamCodes] = useState<Set<string>>(new Set());
   const [printMode, setPrintMode] = useState<'all' | 'single' | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [isPublished, setIsPublished] = useState(false);
+  const [publishedSessionId, setPublishedSessionId] = useState<string>('');
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [totalPublished, setTotalPublished] = useState(0);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -121,6 +128,65 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   if (!rooms || rooms.length === 0) {
     return <div className="text-center py-20 text-muted-foreground">No rooms to display.</div>;
   }
+
+  const handlePublish = async () => {
+    if (publishing || isPublished) return;
+    setPublishing(true);
+    try {
+      const sessionId = `session_${Date.now()}`;
+      const rows: Array<{
+        roll_number: string;
+        room_number: number;
+        seat_number: number;
+        exam_code: string | null;
+        dept: string | null;
+        session_id: string;
+        published_at: string;
+      }> = [];
+      const publishedAt = new Date().toISOString();
+      const seen = new Set<string>();
+      rooms.forEach(room => {
+        room.students.forEach((student, idx) => {
+          if (!student?.rollNumber || seen.has(student.rollNumber)) return;
+          seen.add(student.rollNumber);
+          rows.push({
+            roll_number: student.rollNumber.toUpperCase(),
+            room_number: Number(room.roomNumber),
+            seat_number: idx + 1,
+            exam_code: student.examCode || null,
+            dept: student.department || null,
+            session_id: sessionId,
+            published_at: publishedAt,
+          });
+        });
+      });
+
+      const { error } = await supabase
+        .from('exam_seating_lookup')
+        .upsert(rows, { onConflict: 'roll_number,session_id' });
+      if (error) throw error;
+
+      const { error: sessErr } = await supabase
+        .from('exam_sessions')
+        .upsert([{
+          session_id: sessionId,
+          total_students: rows.length,
+          total_rooms: rooms.length,
+          published_at: publishedAt,
+          is_active: true,
+        }]);
+      if (sessErr) throw sessErr;
+
+      setPublishedSessionId(sessionId);
+      setTotalPublished(rows.length);
+      setIsPublished(true);
+      setShowQrModal(true);
+    } catch (e: any) {
+      alert('Publish failed: ' + (e?.message || 'Unknown error'));
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   const triggerPrint = (mode: 'all' | 'single') => {
     setPrintMode(mode);
@@ -401,15 +467,78 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
         </div>
       </div>
 
-      {/* Print buttons */}
-      <div className="no-print mt-8 flex gap-3 justify-center">
+      {/* Print + Publish buttons */}
+      <div className="no-print mt-8 flex flex-wrap gap-3 justify-center">
         <Button onClick={() => triggerPrint('single')} variant="outline" className="px-8 h-12 text-base rounded-xl">
           Print This Room
         </Button>
         <Button onClick={() => triggerPrint('all')} className="px-12 h-12 text-base rounded-xl">
           Print All Rooms
         </Button>
+        <button
+          onClick={handlePublish}
+          disabled={publishing || isPublished}
+          style={{
+            padding: '0 24px', height: 48, borderRadius: 12,
+            border: 'none',
+            background: isPublished ? '#2E7D32' : '#1565C0',
+            color: '#fff',
+            cursor: publishing || isPublished ? 'default' : 'pointer',
+            fontSize: 15, fontWeight: 500,
+          }}
+        >
+          {publishing ? 'Publishing...' : isPublished ? '✓ Published to Students' : '📤 Publish to Students'}
+        </button>
+        {isPublished && (
+          <Button variant="outline" onClick={() => setShowQrModal(true)} className="px-6 h-12 text-base rounded-xl">
+            Show QR
+          </Button>
+        )}
       </div>
+
+      {showQrModal && isPublished && (() => {
+        const studentPageUrl = `${window.location.origin}/student?session=${publishedSessionId}`;
+        return (
+          <div className="no-print" style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          }}>
+            <div style={{
+              background: '#fff', borderRadius: 16, padding: 32,
+              maxWidth: 400, width: '90%', textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Published Successfully</h2>
+              <p style={{ fontSize: 13, color: '#666', marginBottom: 20 }}>
+                {totalPublished} students · {rooms.length} rooms
+              </p>
+              <div style={{
+                display: 'inline-block', padding: 12,
+                border: '1px solid #eee', borderRadius: 8, marginBottom: 16, background: '#fff',
+              }}>
+                <QRCodeSVG value={studentPageUrl} size={180} level="H" />
+              </div>
+              <p style={{ fontSize: 11, color: '#888', marginBottom: 16, wordBreak: 'break-all' }}>
+                {studentPageUrl}
+              </p>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => navigator.clipboard.writeText(studentPageUrl)}
+                  style={{ flex: 1, padding: 10, borderRadius: 6, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontSize: 13 }}
+                >
+                  Copy Link
+                </button>
+                <button
+                  onClick={() => setShowQrModal(false)}
+                  style={{ flex: 1, padding: 10, borderRadius: 6, border: 'none', background: '#1a1a1a', color: '#fff', cursor: 'pointer', fontSize: 13 }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Print-only layout */}
       <div ref={printRef} id="print-area" className="hidden print:block print-root">
