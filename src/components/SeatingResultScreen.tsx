@@ -152,19 +152,29 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       const seen = new Set<string>();
       rooms.forEach(room => {
         const label = (roomLabels[room.roomNumber] ?? String(room.roomNumber)).trim() || String(room.roomNumber);
-        room.students.forEach((student, idx) => {
-          if (!student?.rollNumber || seen.has(student.rollNumber)) return;
-          seen.add(student.rollNumber);
-          rows.push({
-            roll_number: student.rollNumber.toUpperCase(),
-            room_number: label,
-            seat_number: idx + 1,
-            exam_code: student.examCode || null,
-            dept: student.department || null,
-            session_id: sessionId,
-            published_at: publishedAt,
-          });
-        });
+        // Seat numbers MUST match the print table layout: walk grid row-by-row,
+        // column-by-column, skipping empty cells. This matches PrintSeatingLayout's
+        // sequential numbering shown next to each roll number.
+        let seatNo = 0;
+        for (let r = 0; r < room.grid.length; r++) {
+          const row = room.grid[r];
+          for (let c = 0; c < (row?.length || 0); c++) {
+            const student = row[c];
+            if (!student) continue;
+            seatNo++;
+            if (!student.rollNumber || seen.has(student.rollNumber)) continue;
+            seen.add(student.rollNumber);
+            rows.push({
+              roll_number: student.rollNumber.toUpperCase(),
+              room_number: label,
+              seat_number: seatNo,
+              exam_code: student.examCode || null,
+              dept: student.department || null,
+              session_id: sessionId,
+              published_at: publishedAt,
+            });
+          }
+        }
       });
 
       const { error } = await supabase
