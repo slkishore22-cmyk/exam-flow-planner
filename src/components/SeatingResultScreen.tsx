@@ -22,7 +22,12 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
   const [publishedSessionId, setPublishedSessionId] = useState<string>('');
   const [showQrModal, setShowQrModal] = useState(false);
   const [totalPublished, setTotalPublished] = useState(0);
+  const [roomLabels, setRoomLabels] = useState<Record<number, string>>({});
+  const [editingRoom, setEditingRoom] = useState<number | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
+
+  const getRoomLabel = (room: RoomAllocation) =>
+    (roomLabels[room.roomNumber]?.trim()) || String(room.roomNumber);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
