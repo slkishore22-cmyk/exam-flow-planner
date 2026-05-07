@@ -571,7 +571,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
           const isLast = i === arr.length - 1;
           return (
             <div key={room.roomNumber} className={!isLast ? 'page-break' : ''}>
-              <PrintSeatingLayout room={room} />
+              <PrintSeatingLayout room={room} roomLabel={getRoomLabel(room)} />
             </div>
           );
         })}
