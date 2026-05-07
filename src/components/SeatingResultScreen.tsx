@@ -136,7 +136,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       const sessionId = `session_${Date.now()}`;
       const rows: Array<{
         roll_number: string;
-        room_number: number;
+        room_number: string;
         seat_number: number;
         exam_code: string | null;
         dept: string | null;
@@ -146,12 +146,13 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       const publishedAt = new Date().toISOString();
       const seen = new Set<string>();
       rooms.forEach(room => {
+        const label = (roomLabels[room.roomNumber] ?? String(room.roomNumber)).trim() || String(room.roomNumber);
         room.students.forEach((student, idx) => {
           if (!student?.rollNumber || seen.has(student.rollNumber)) return;
           seen.add(student.rollNumber);
           rows.push({
             roll_number: student.rollNumber.toUpperCase(),
-            room_number: Number(room.roomNumber),
+            room_number: label,
             seat_number: idx + 1,
             exam_code: student.examCode || null,
             dept: student.department || null,
