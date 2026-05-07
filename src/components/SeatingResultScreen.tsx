@@ -382,9 +382,10 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
       )}
 
       {/* Room tabs */}
-      <div className="no-print flex flex-wrap gap-2 mb-6 justify-center">
+      <div className="no-print flex flex-wrap gap-2 mb-4 justify-center">
         {rooms.map((room, i) => {
           const hasViolation = roomViolations[i].count > 0;
+          const label = getRoomLabel(room);
           return (
             <button
               key={i}
@@ -396,11 +397,29 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
               }`}
               style={hasViolation && i !== activeRoom ? { borderColor: '#EF4444' } : undefined}
             >
-              Room {room.roomNumber}
+              Room {label}
               {hasViolation && <span style={{ color: '#EF4444' }}> •</span>}
             </button>
           );
         })}
+      </div>
+
+      {/* Room name editor */}
+      <div className="no-print mb-6 flex items-center justify-center gap-2 flex-wrap">
+        <span className="text-xs text-muted-foreground">Rename room:</span>
+        {rooms.map((room, i) => (
+          <div key={i} className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">#{room.roomNumber} →</span>
+            <input
+              type="text"
+              value={roomLabels[room.roomNumber] ?? ''}
+              onChange={e => setRoomLabels(prev => ({ ...prev, [room.roomNumber]: e.target.value }))}
+              placeholder={String(room.roomNumber)}
+              maxLength={20}
+              className="px-2 py-1 text-xs border border-border rounded-md bg-background w-24 focus:outline-none focus:ring-1 focus:ring-foreground"
+            />
+          </div>
+        ))}
       </div>
 
       {/* Exam code reveal bar — universal across all rooms */}
