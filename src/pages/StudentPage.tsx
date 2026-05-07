@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { publicSupabase } from '@/integrations/supabase/public-client';
 
 interface SeatResult {
   roll_number: string;
@@ -28,7 +28,7 @@ export default function StudentPage() {
     setError('');
     setResult(null);
 
-    let query = supabase
+    let query = publicSupabase
       .from('exam_seating_lookup')
       .select('*')
       .eq('roll_number', rollInput.trim().toUpperCase());
