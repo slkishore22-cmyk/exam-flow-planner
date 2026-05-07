@@ -70,7 +70,7 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room, roomLabel
       <div className="ps-meta">
         <div>DATE: ____________</div>
         <div>SESSION: ________</div>
-        <div>ROOM NO: {room.roomNumber}</div>
+        <div>ROOM NO: {roomLabel ?? room.roomNumber}</div>
       </div>
 
       {/* SEATING TABLES — 3 main tables side by side, each 3 sub-cols × 5 rows */}
