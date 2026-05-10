@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
-import { RoomAllocation, RoomConfig, PatternDecision, getExamCodeColor, getGroupLabel } from '@/lib/seating-utils';
+import { RoomAllocation, RoomConfig, PatternDecision, getDeptColor, getGroupLabel } from '@/lib/seating-utils';
 import PrintRoomLayout, { getDeptShape } from './PrintRoomLayout';
 import PrintSeatingLayout from './PrintSeatingLayout';
 import { supabase } from '@/integrations/supabase/client';
@@ -289,7 +289,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                   );
                 } else {
                   // Visible — show full student info
-                  const color = getExamCodeColor(student!.examCode);
+                  const color = getDeptColor(student!.department);
                   cellBg = color.bg;
                   cellBorder = isViolation ? '3px solid #EF4444' : '2px solid white';
                   cellContent = (
