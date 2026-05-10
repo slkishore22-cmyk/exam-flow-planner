@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { RoomAllocation } from '@/lib/seating-utils';
+import { RoomAllocation, getExamCodeColor } from '@/lib/seating-utils';
 
 interface PrintSeatingLayoutProps {
   room: RoomAllocation;
@@ -94,9 +94,15 @@ const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room, roomLabel
                 <tr key={r}>
                   {Array.from({ length: SUBS }).map((_, s) => {
                     const entry = cellMap[`${m}-${s}-${r}`] || null;
+                    const color = entry ? getExamCodeColor(entry.examCode) : null;
                     return (
                       <React.Fragment key={s}>
-                        <td className="ps-roll">{entry ? entry.rollNumber : ''}</td>
+                        <td
+                          className="ps-roll"
+                          style={color ? { backgroundColor: color.bg, color: color.text, fontWeight: 700, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : undefined}
+                        >
+                          {entry ? entry.rollNumber : ''}
+                        </td>
                         <td className="ps-seat">{entry ? entry.seatNumber : ''}</td>
                       </React.Fragment>
                     );
