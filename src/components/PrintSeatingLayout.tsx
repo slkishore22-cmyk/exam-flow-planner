@@ -14,11 +14,12 @@ interface SeatEntry {
 }
 
 const PrintSeatingLayout: React.FC<PrintSeatingLayoutProps> = ({ room, roomLabel }) => {
-  // Fixed grid: 3 MAIN tables × 3 SUB cols × 5 ROWS, mapped DIRECTLY from
-  // room.grid so empty cells in the allocation stay empty in print too.
-  const ROWS = 5;
-  const SUBS = 3;
-  const MAINS = 3;
+  // Grid dimensions come from the room itself so general-exam rooms (with
+  // different mainColumns / seatsPerColumn / row counts) are printed exactly
+  // like normal rooms but at their own size. Empty cells stay empty.
+  const ROWS = room.grid.length;
+  const SUBS = room.seatsPerColumn ?? 3;
+  const MAINS = room.mainColumns ?? 3;
 
   // Build a position->seatNumber map preserving empties.
   // Numbering: row-by-row, col-by-col, only occupied cells get numbers.
