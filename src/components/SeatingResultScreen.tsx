@@ -289,7 +289,7 @@ const SeatingResultScreen: React.FC<SeatingResultScreenProps> = ({ rooms, config
                   );
                 } else {
                   // Visible — show full student info
-                  const color = getDeptColor(student!.department);
+                  const color = getExamCodeColor(student!.examCode);
                   cellBg = color.bg;
                   cellBorder = isViolation ? '3px solid #EF4444' : '2px solid white';
                   cellContent = (
